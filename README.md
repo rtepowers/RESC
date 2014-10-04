@@ -1,5 +1,5 @@
-## RESC
-# Ray's Easily Scaled Chat
+# RESC
+## Ray's Easily Scaled Chat
 
 This repo will contain the necessary components to building and using
 an incredibly simple but scalable chat system. 
