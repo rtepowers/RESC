@@ -444,11 +444,11 @@ bool getUserInput(string& inputStr, bool isPwd) {
     // Allow for Backspacing.
     if (userText == BACKSPACE_SYM || userText == DELETE_SYM) {
       if (inputStr.length() > 0) {
-	inputStr.replace(inputStr.length()-1, 1, "");
-	wmove(INPUT_SCREEN, 1, 8 + inputStr.length());
-	userText = 32;
-	waddch(INPUT_SCREEN, userText);
-	wmove(INPUT_SCREEN, 1, 8 + inputStr.length());
+		inputStr.replace(inputStr.length()-1, 1, "");
+		wmove(INPUT_SCREEN, 1, 8 + inputStr.length());
+		userText = 32;
+		waddch(INPUT_SCREEN, userText);
+		wmove(INPUT_SCREEN, 1, 8 + inputStr.length());
       }
 
       // Show new screen.
@@ -456,9 +456,9 @@ bool getUserInput(string& inputStr, bool isPwd) {
     }
     
     if (userText == ENTER_SYM) {
-    // If inputStr isn't empty, it should be submitted.
-      if (inputStr.size() > 0) {
-	success = true;
+	  // If inputStr isn't empty, it should be submitted.
+	  if (inputStr.size() > 0) {
+		success = true;
       }
     }
   }

@@ -149,6 +149,9 @@ void* clientThread(void* args_p) {
   pthread_detach(pthread_self());
 
   // TODO: DO WORK
+  string MOTD = "RESC Server";
+  SendInteger(clientSock, MOTD.length()+1);
+  SendMessage(clientSock, MOTD);
 
   // Close Client socket
   close(clientSock);
