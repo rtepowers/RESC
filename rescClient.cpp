@@ -415,3 +415,52 @@ void displayMsg(string &msg) {
   pthread_mutex_unlock(&displayLock);
 
 }
+
+bool getUserInput(string& inputStr, bool isPwd) {
+
+  // Locals
+  bool success = false;
+  int userText;
+
+  // Get input from from the input screen. Timeout will occur if no characters are available.
+  userText = wgetch(INPUT_SCREEN);
+
+  // Did we return a proper value?
+  if (userText == ERR)
+    return false;
+
+  // Can we display the text? Add to inputStr if yes.
+  if (isprint(userText)) {
+    inputStr += (char)userText;
+    if (!isPwd) {
+      waddch(INPUT_SCREEN, userText);
+    } else {
+      char COVER = '*';
+      waddch(INPUT_SCREEN, COVER);
+    }
+  }
+  // Pressing <enter> signals that the user has 'sent' something.
+  else {
+    // Allow for Backspacing.
+    if (userText == BACKSPACE_SYM || userText == DELETE_SYM) {
+      if (inputStr.length() > 0) {
+	inputStr.replace(inputStr.length()-1, 1, "");
+	wmove(INPUT_SCREEN, 1, 8 + inputStr.length());
+	userText = 32;
+	waddch(INPUT_SCREEN, userText);
+	wmove(INPUT_SCREEN, 1, 8 + inputStr.length());
+      }
+
+      // Show new screen.
+      wrefresh(INPUT_SCREEN);
+    }
+    
+    if (userText == ENTER_SYM) {
+    // If inputStr isn't empty, it should be submitted.
+      if (inputStr.size() > 0) {
+	success = true;
+      }
+    }
+  }
+  return success;
+}
