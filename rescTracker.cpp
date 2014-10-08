@@ -1,8 +1,10 @@
 // AUTHOR: Raymond Powers
-// DATE: October 3, 2014
+// DATE: October 7, 2014
 // PLATFORM: C++ 
 
-// DESCRIPTION: Ray's Easily Scaled Chat Server
+// DESCRIPTION: Ray's Easily Scaled Chat Tracker
+//              This application will handle Server initiation and Client
+//              load balancing.
 
 // Standard Library
 #include<iostream>
@@ -32,21 +34,17 @@ struct threadArgs {
   int clientSock;
 };
 
-struct User {
-// TODO: Determine what a User is. Classify?
-};
-
-struct Msg {
-// TODO: Determine what a Msg is. Classify?
-};
-
 // GLOBALS
 const int MAXPENDING = 20;
-
 
 // Function Prototypes
 void* clientThread(void* args_p);
 // Function serves as the entry point to a new thread.
+// pre: none
+// post: none
+
+void ProcessRequest(int requestSock);
+// Function process incoming request whether from client or server
 // pre: none
 // post: none
 
@@ -148,13 +146,19 @@ void* clientThread(void* args_p) {
   // Detach Thread to ensure that resources are deallocated on return.
   pthread_detach(pthread_self());
 
-  // TODO: DO WORK
+  // Handle Request
+  ProcessRequest(clientSock);
 
   // Close Client socket
   close(clientSock);
 
   // Quit thread
   pthread_exit(NULL);
+}
+
+void ProcessRequest(int requestSock) {
+	// Local Variables
+	
 }
 
 bool SendMessage(int HostSock, string msg) {
