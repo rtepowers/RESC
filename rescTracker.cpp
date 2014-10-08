@@ -202,22 +202,8 @@ void ProcessRequest(int requestSock) {
 	}
 	
 	// Otherwise, request is a Server
-	// Let's grab their IP address
-	socklen_t len;
-	struct sockaddr_storage addr;
-	char ipstr[INET6_ADDRSTRLEN];
-	int port;
-	len = sizeof addr;
-	getpeername(requestSock, (struct sockaddr*)&addr, &len);
-	// deal with IPv4:
-	if (addr.ss_family == AF_INET) {
-		struct sockaddr_in *s = (struct sockaddr_in *)&addr;
-		port = ntohs(s->sin_port);
-		inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
-	}
-	
-	char hostname[128];
-	gethostname(hostname, sizeof hostname);
+	long nameLength = GetInteger(requestSock);
+	string hostname = GetMessage(requestSock, nameLength);
 	
 	// Finally add this server to pool
 	Server newSvr;

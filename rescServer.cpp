@@ -125,6 +125,11 @@ int main(int argNum, char* argValues[]){
   string identifier = "SERVER";
   SendInteger(trackerSock, identifier.length()+1);
   SendMessage(trackerSock, identifier);
+  char currentHostName_c[128];
+  gethostname(currentHostName_c, sizeof currentHostName_c);
+  string currentHostName = currentHostName_c;
+  SendInteger(trackerSock, currentHostName.length()+1);
+  SendMessage(trackerSock, currentHostName);
   close(trackerSock);
   
   cout << endl << endl << "RESC SERVER: Ready to accept connections. " << endl;
