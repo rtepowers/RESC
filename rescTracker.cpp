@@ -22,6 +22,7 @@
 #include<netinet/in.h>
 #include<arpa/inet.h>
 #include<unistd.h>
+#include<netdb.h>
 
 // Multithreading
 #include<pthread.h>
@@ -191,11 +192,10 @@ void ProcessRequest(int requestSock) {
 			ServerList.pop();
 			ServerList.push(svrTmp);
 		}
-		
-		cout << "Sending client the hostname: " << svrTmp.hostName << "!" << endl;
 		pthread_mutex_unlock(&ServerListLock);
 		
 		// Send back the hostname
+		cout << "Sending client the hostname: " << svrTmp.hostName << "!" << endl;
 		SendInteger(requestSock, svrTmp.hostName.length()+1);
 		SendMessage(requestSock, svrTmp.hostName);
 		return;
@@ -217,7 +217,6 @@ void ProcessRequest(int requestSock) {
 	}
 	
 	char hostname[128];
-
 	gethostname(hostname, sizeof hostname);
 	
 	// Finally add this server to pool

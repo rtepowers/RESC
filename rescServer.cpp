@@ -10,8 +10,6 @@
 #include<string>
 #include<ctime>
 #include<cstdlib>
-#include<unordered_map>
-#include<deque>
 
 // Network Functions
 #include<sys/types.h>
@@ -21,6 +19,7 @@
 #include<netinet/in.h>
 #include<arpa/inet.h>
 #include<unistd.h>
+#include<netdb.h>
 
 // Multithreading
 #include<pthread.h>
@@ -48,6 +47,16 @@ const int MAXPENDING = 20;
 void* clientThread(void* args_p);
 // Function serves as the entry point to a new thread.
 // pre: none
+// post: closes socket
+
+void ProcessMessage(int clientSock);
+// Function handles chat portion of application.
+// pre: clientSock must be established
+// post: none
+
+int openSocket (string hostName, unsigned short serverPort);
+// Function sets up a working socket to use in sending data.
+// pre: none
 // post: none
 
 bool SendMessage(int HostSock, string msg);
@@ -70,17 +79,20 @@ long GetInteger(int HostSocks);
 // pre: HostSock must exist.
 // post: none
 
-int main(int argc, char* argv[]){
+int main(int argNum, char* argValues[]){
 
   // Process Arguments
   unsigned short serverPort; 
-  if (argc != 2){
+  string trackerHostName;
+  // Need to grab Command-line arguments and convert them to useful types
+  // Initialize arguments with proper variables.
+  if (argNum != 3){
     // Incorrect number of arguments
-    // TODO: Could probably have better argument checking. BoostLib?
     cerr << "Incorrect number of arguments. Please try again." << endl;
     return -1;
   }
-  serverPort = atoi(argv[1]); 
+  trackerHostName = argValues[1];
+  serverPort = atoi(argValues[2]); 
 
   // Create socket connection
   int conn_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -108,6 +120,13 @@ int main(int argc, char* argv[]){
     cerr << "Error with listening." << endl;
     exit(-1);
   }
+  
+  int trackerSock = openSocket(trackerHostName, serverPort+1);
+  string identifier = "SERVER";
+  SendInteger(trackerSock, identifier.length()+1);
+  SendMessage(trackerSock, identifier);
+  close(trackerSock);
+  
   cout << endl << endl << "RESC SERVER: Ready to accept connections. " << endl;
 
   // Accept connections
@@ -148,7 +167,8 @@ void* clientThread(void* args_p) {
   // Detach Thread to ensure that resources are deallocated on return.
   pthread_detach(pthread_self());
 
-  // TODO: DO WORK
+  // Handle chat
+  ProcessMessage(clientSock);
 
   // Close Client socket
   close(clientSock);
@@ -156,6 +176,101 @@ void* clientThread(void* args_p) {
   // Quit thread
   pthread_exit(NULL);
 }
+
+void ProcessMessage(int clientSock) {
+	// Locals
+	string clientMsg = "";
+	fd_set clientfd;
+	struct timeval tv;
+	int sockIndex = 0;
+	
+	// Clear FD_Set and set timeout.
+	FD_ZERO(&clientfd);
+	tv.tv_sec = 2;
+	tv.tv_usec = 100000;
+
+	// Initialize Data
+	FD_SET(clientSock, &clientfd);
+	sockIndex = clientSock + 1;
+	
+	while (clientMsg != "/quit") {
+		// Send Data
+		if (clientMsg != "") {
+			string response = "Server has listened!\n";
+			SendInteger(clientSock, response.length()+1);
+			SendMessage(clientSock, response);
+			clientMsg.clear();
+		}
+		
+		// Read Data
+		int pollSock = select(sockIndex, &clientfd, NULL, NULL, &tv);
+		tv.tv_sec = 1;
+		tv.tv_usec = 100000;
+		FD_SET(clientSock, &clientfd);
+		if (pollSock != 0 && pollSock != -1) {
+		  string tmp;
+		  long msgLength = GetInteger(clientSock);
+		  if (msgLength <= 0) {
+			cerr << "Couldn't get integer from Client." << endl;
+			break;
+		  }
+		  
+		  clientMsg = GetMessage(clientSock, msgLength);
+		  if (clientMsg == "") {
+			cerr << "Couldn't get message from Client." << endl;
+			break;
+		  }
+		  tmp = "Client Said: ";
+		  tmp.append(clientMsg);
+		  cout << tmp << endl;
+		  tmp.clear();
+		  
+		}
+	}
+	  cout << "Closing Thread." << endl;
+}
+
+int openSocket (string hostName, unsigned short serverPort) {
+
+  // Local variables.
+  struct hostent* host;
+  int status;
+  int bytesRecv;
+
+  // Create a socket and start server communications.
+  int hostSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (hostSock <= 0) {
+    // Socket was unsuccessful.
+    cerr << "Socket was unable to be opened." << endl;
+    return -1;
+  }
+
+  // Get host IP and Set proper fields
+  host = gethostbyname(hostName.c_str());
+  if (!host) {
+    cerr << "Unable to resolve hostname's ip address. Exiting..." << endl;
+    return -1;
+  }
+  char* tmpIP = inet_ntoa( *(struct in_addr *)host->h_addr_list[0]);
+  unsigned long serverIP;
+  status = inet_pton(AF_INET, tmpIP,(void*) &serverIP);
+  if (status <= 0) return -1;
+
+  struct sockaddr_in serverAddress;
+  serverAddress.sin_family = AF_INET;
+  serverAddress.sin_addr.s_addr = serverIP ;
+  serverAddress.sin_port = htons(serverPort);
+
+  // Now that we have the proper information, we can open a connection.
+  status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
+  if (status < 0) {
+    cerr << "Error with the connection." << endl;
+    return -1;
+  }
+
+  return hostSock;
+}
+
 
 bool SendMessage(int HostSock, string msg) {
 

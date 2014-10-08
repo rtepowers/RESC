@@ -115,7 +115,7 @@ int main (int argNum, char* argValues[]) {
 
   // Need to grab Command-line arguments and convert them to useful types
   // Initialize arguments with proper variables.
-  if (argNum < 3 || argNum > 3){
+  if (argNum != 3){
     // Incorrect number of arguments
     cerr << "Incorrect number of arguments. Please try again." << endl;
     return -1;
@@ -129,17 +129,27 @@ int main (int argNum, char* argValues[]) {
   prepareWindows();
 
   // Establish a socket Connection
-  hostSock = openSocket(hostname, serverPort);
+  hostSock = openSocket(hostname, serverPort+1);
+  
+  // Get A Chat Server 
+  string identifier = "CLIENT";
+  SendInteger(hostSock, identifier.length()+1);
+  SendMessage(hostSock, identifier);
+  long serverNameLength = GetInteger(hostSock);
+  string serverName = GetMessage(hostSock, serverNameLength);
+  close(hostSock);
+  
+  int serverSock = openSocket(serverName, serverPort);
   
   // Login State
   // TODO: Figure out Authentication?
-  string welcomeMsg = "\nWelcome!\n\n";
+  string welcomeMsg = "\nWelcome to RESC!\n\n";
   displayMsg(welcomeMsg);
   wrefresh(INPUT_SCREEN);
   
   // Establish a Thread to handle displaying new messages.
   struct threadArgs* args_p = new threadArgs;
-  args_p -> serverSock = hostSock;
+  args_p -> serverSock = serverSock;
   pthread_t tid;
   int threadStatus = pthread_create(&tid, NULL, clientThread, (void*)args_p);
   if (threadStatus != 0){
@@ -165,12 +175,12 @@ int main (int argNum, char* argValues[]) {
 		displayMsg(tmp);
 		
 		// Send to Server
-		if (!SendInteger(hostSock, inputStr.length()+1)) {
+		if (!SendInteger(serverSock, inputStr.length()+1)) {
 		  cerr << "Unable to send Int. " << endl;
 		  break;
 		}
 
-		if (!SendMessage(hostSock, inputStr)) {
+		if (!SendMessage(serverSock, inputStr)) {
 		  cerr << "Unable to send Message. " << endl;
 		  break;
 		}
@@ -180,6 +190,14 @@ int main (int argNum, char* argValues[]) {
 		clearInputScreen();
       }
     }
+	// Send to Server
+	if (!SendInteger(serverSock, inputStr.length()+1)) {
+	  cerr << "Unable to send Int. " << endl;
+	}
+
+	if (!SendMessage(serverSock, inputStr)) {
+	  cerr << "Unable to send Message. " << endl;
+	}
   }//*/
 
   // Clean up and Close things down.
