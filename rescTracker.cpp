@@ -12,8 +12,7 @@
 #include<string>
 #include<ctime>
 #include<cstdlib>
-#include<unordered_map>
-#include<deque>
+#include<queue>
 
 // Network Functions
 #include<sys/types.h>
@@ -34,8 +33,15 @@ struct threadArgs {
   int clientSock;
 };
 
+struct Server {
+	string hostName;
+};
+
 // GLOBALS
 const int MAXPENDING = 20;
+queue<Server> ServerList;
+pthread_mutex_t ServerListLock;
+int ServerStatus = pthread_mutex_init(&ServerListLock, NULL);
 
 // Function Prototypes
 void* clientThread(void* args_p);
@@ -106,7 +112,7 @@ int main(int argc, char* argv[]){
     cerr << "Error with listening." << endl;
     exit(-1);
   }
-  cout << endl << endl << "SERVER: Ready to accept connections. " << endl;
+  cout << endl << endl << "RESC Tracker: Ready to accept connections. " << endl;
 
   // Accept connections
   while (true) {
@@ -159,6 +165,66 @@ void* clientThread(void* args_p) {
 void ProcessRequest(int requestSock) {
 	// Local Variables
 	
+	// Need to identify request
+	long identityLength = GetInteger(requestSock);
+	if (identityLength <= 0) {
+		cerr << "Failed reading socket: " << requestSock << endl;
+		return;
+	}
+	string identifierType = GetMessage(requestSock, identityLength);
+	if (identifierType != "CLIENT" && identifierType != "SERVER") {
+		cerr << "Failed to identify request at socket: " << requestSock << endl;
+		return;
+	}
+	
+	// For Clients
+	if (identifierType == "CLIENT") {
+		Server svrTmp;
+		svrTmp.hostName = "ERROR";
+		pthread_mutex_lock(&ServerListLock);
+		// Cycle list of servers so we have a RoundRobin scheme
+		if (ServerList.empty()) {
+			// No servers here.
+		} else {
+			// Take the front.
+			svrTmp = ServerList.front();
+			ServerList.pop();
+			ServerList.push(svrTmp);
+		}
+		pthread_mutex_unlock(&ServerListLock);
+		
+		// Send back the hostname
+		SendInteger(requestSock, svrTmp.hostName.length()+1);
+		SendMessage(requestSock, svrTmp.hostName);
+		return;
+	}
+	
+	// Otherwise, request is a Server
+	// Let's grab their IP address
+	socklen_t len;
+	struct sockaddr_storage addr;
+	char ipstr[INET6_ADDRSTRLEN];
+	int port;
+
+	len = sizeof addr;
+	getpeername(requestSock, (struct sockaddr*)&addr, &len);
+
+	// deal with both IPv4 and IPv6:
+	if (addr.ss_family == AF_INET) {
+		struct sockaddr_in *s = (struct sockaddr_in *)&addr;
+		port = ntohs(s->sin_port);
+		inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
+	} else { // AF_INET6
+		struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
+		port = ntohs(s->sin6_port);
+		inet_ntop(AF_INET6, &s->sin6_addr, ipstr, sizeof ipstr);
+	}
+
+	Server newSvr;
+	newSvr.hostName = ipstr;
+	pthread_mutex_lock(&ServerListLock);
+		ServerList.push(newSvr);
+	pthread_mutex_unlock(&ServerListLock);
 }
 
 bool SendMessage(int HostSock, string msg) {

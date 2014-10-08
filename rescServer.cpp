@@ -108,7 +108,7 @@ int main(int argc, char* argv[]){
     cerr << "Error with listening." << endl;
     exit(-1);
   }
-  cout << endl << endl << "SERVER: Ready to accept connections. " << endl;
+  cout << endl << endl << "RESC SERVER: Ready to accept connections. " << endl;
 
   // Accept connections
   while (true) {
