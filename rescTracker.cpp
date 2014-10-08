@@ -191,6 +191,8 @@ void ProcessRequest(int requestSock) {
 			ServerList.pop();
 			ServerList.push(svrTmp);
 		}
+		
+		cout << "Sending client the hostname: " << svrTmp.hostName << "!" << endl;
 		pthread_mutex_unlock(&ServerListLock);
 		
 		// Send back the hostname
@@ -205,26 +207,28 @@ void ProcessRequest(int requestSock) {
 	struct sockaddr_storage addr;
 	char ipstr[INET6_ADDRSTRLEN];
 	int port;
-
 	len = sizeof addr;
 	getpeername(requestSock, (struct sockaddr*)&addr, &len);
-
-	// deal with both IPv4 and IPv6:
+	// deal with IPv4:
 	if (addr.ss_family == AF_INET) {
 		struct sockaddr_in *s = (struct sockaddr_in *)&addr;
 		port = ntohs(s->sin_port);
 		inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
-	} else { // AF_INET6
-		struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
-		port = ntohs(s->sin6_port);
-		inet_ntop(AF_INET6, &s->sin6_addr, ipstr, sizeof ipstr);
 	}
+	
+	char hostname[128];
 
+	gethostname(hostname, sizeof hostname);
+	
+	// Finally add this server to pool
 	Server newSvr;
 	newSvr.hostName = ipstr;
 	pthread_mutex_lock(&ServerListLock);
 		ServerList.push(newSvr);
+		cout << "Adding " << newSvr.hostName << " or " << hostname << " to pool!" << endl;
 	pthread_mutex_unlock(&ServerListLock);
+	
+	// Now send list of Peers 
 }
 
 bool SendMessage(int HostSock, string msg) {

@@ -158,6 +158,23 @@ int main (int argNum, char* argValues[]) {
 		  break;
 		}
 		
+		// Display message in chat window
+		string tmp = "You said: ";
+		tmp.append(inputStr);
+		tmp.append("\n");
+		displayMsg(tmp);
+		
+		// Send to Server
+		if (!SendInteger(hostSock, inputStr.length()+1)) {
+		  cerr << "Unable to send Int. " << endl;
+		  break;
+		}
+
+		if (!SendMessage(hostSock, inputStr)) {
+		  cerr << "Unable to send Message. " << endl;
+		  break;
+		}
+		
 		// Clean slate
 		inputStr.clear();
 		clearInputScreen();
@@ -379,13 +396,13 @@ void DisplayData (int hostSock) {
     if (pollSock != 0 && pollSock != -1) {
       long msgLength = GetInteger(hostSock);
       if (msgLength <= 0) {
-	cerr << "Couldn't get integer from Client." << endl;
-	break;
+		cerr << "Couldn't get integer from Server." << endl;
+		break;
       }
       string clientMsg = GetMessage(hostSock, msgLength);
       if (clientMsg == "") {
-	cerr << "Couldn't get message from Client." << endl;
-	break;
+		cerr << "Couldn't get message from Server." << endl;
+		break;
       }
       displayMsg(clientMsg);
       wrefresh(INPUT_SCREEN);
