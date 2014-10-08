@@ -221,7 +221,7 @@ void ProcessRequest(int requestSock) {
 	
 	// Finally add this server to pool
 	Server newSvr;
-	newSvr.hostName = ipstr;
+	newSvr.hostName = hostname;
 	pthread_mutex_lock(&ServerListLock);
 		ServerList.push(newSvr);
 		cout << "Adding " << newSvr.hostName << " or " << hostname << " to pool!" << endl;
