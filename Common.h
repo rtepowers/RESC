@@ -23,6 +23,24 @@
 using namespace std;
 
 namespace RESC {
+
+// CORE DATA TYPES
+	struct Msg {
+		string To;
+		string From;
+		string Text;
+		string Command;
+	};
+
+	struct User {
+		string username;
+	};
+// CORE DATA HELPERS
+	Msg ProcessText(string message) {
+	}
+
+
+// NETWORK HELPERS
 	long GetInteger(int inSock) {
 
 	  // Retreive length of msg

@@ -35,14 +35,6 @@ struct threadArgs {
   int clientSock;
 };
 
-struct User {
-// TODO: Determine what a User is. Classify?
-};
-
-struct Msg {
-// TODO: Determine what a Msg is. Classify?
-};
-
 // GLOBALS
 const int MAXPENDING = 20;
 
