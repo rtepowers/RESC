@@ -10,6 +10,8 @@
 #include<string>
 #include<ctime>
 #include<cstdlib>
+#include<queue>
+#include<unordered_map>
 
 // Network Functions
 #include<sys/types.h>
@@ -37,7 +39,9 @@ struct threadArgs {
 
 // GLOBALS
 const int MAXPENDING = 20;
-
+deque<Msg> MsgQueue;
+pthread_mutex_t MsgQueueLock;
+int MsgQueueStatus = pthread_mutex_init(&MsgQueueLock, NULL);
 
 // Function Prototypes
 void* clientThread(void* args_p);
@@ -58,6 +62,16 @@ void* trackerThread(void* args_p);
 void ProcessTracker(int trackerSock);
 // Function handles chat organization.
 // pre: trackerSock must be established
+// post: none
+
+void AddClientMessage(Msg newMessage);
+// Function handles adding new messages to queue
+// pre: none
+// post: none
+
+string GetClientMessages(User user);
+// Function handles the gathering of messages to a particular user
+// pre: none
 // post: none
 
 int main(int argNum, char* argValues[]){
@@ -285,4 +299,25 @@ void ProcessTracker(int trackerSock) {
 		}
 	}
 	  cout << "Closing Thread." << endl;
+}
+
+
+void AddClientMessage(Msg newMessage) {
+	pthread_mutex_lock(&MsgQueueLock);
+	MsgQueue.push_back(newMessage);
+	pthread_mutex_unlock(&MsgQueueLock);
+}
+
+string GetClientMessages(User user) {
+	stringstream ss;
+	pthread_mutex_lock(&MsgQueueLock);
+	for (int i = 0; i < MsgQueue.size(); i++) {
+		if (MsgQueue[i].Command == "/all") {
+			// Message was intended for all users.
+			ss << MsgQueue[i].Text << endl;
+			MsgQueue.erase
+		}
+	}
+	pthread_mutex_unlock(&MsgQueueLock);
+	return ss.str();
 }

@@ -197,9 +197,46 @@ void ProcessRequest(int requestSock) {
 		cout << "Adding " << newSvr.hostName << " or " << hostname << " to pool!" << endl;
 	pthread_mutex_unlock(&ServerListLock);
 	
+	// should pass messages from queue
+	// Locals
+	fd_set trackerfd;
+	struct timeval tv;
+	int sockIndex = 0;
+	
+	// Clear FD_Set and set timeout.
+	FD_ZERO(&trackerfd);
+	tv.tv_sec = 2;
+	tv.tv_usec = 100000;
+
+	// Initialize Data
+	FD_SET(trackerSock, &trackerfd);
+	sockIndex = trackerSock + 1;
+	
 	while (true) {
-		// should pass messages from queue
+		// Send Data
+		// Grab from MsgQueue
+	
+		// Read Data
+		int pollSock = select(sockIndex, &trackerfd, NULL, NULL, &tv);
+		tv.tv_sec = 1;
+		tv.tv_usec = 100000;
+		FD_SET(trackerSock, &trackerfd);
+		if (pollSock != 0 && pollSock != -1) {
+		  long msgLength = GetInteger(trackerSock);
+		  if (msgLength <= 0) {
+			cerr << "Couldn't get integer from Client." << endl;
+			break;
+		  }
+	  
+		  string trackerMsg = GetMessage(trackerSock, msgLength);
+		  if (trackerMsg == "") {
+			cerr << "Couldn't get message from Client." << endl;
+			break;
+		  }
+		  cout << "Message from Tracker: " << trackerMsg << endl;
+		}
 	}
+	cout << "Closing Thread." << endl;
 	
 	// Now send list of Peers 
 }
