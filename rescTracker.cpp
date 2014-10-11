@@ -197,5 +197,9 @@ void ProcessRequest(int requestSock) {
 		cout << "Adding " << newSvr.hostName << " or " << hostname << " to pool!" << endl;
 	pthread_mutex_unlock(&ServerListLock);
 	
+	while (true) {
+		// should pass messages from queue
+	}
+	
 	// Now send list of Peers 
 }
