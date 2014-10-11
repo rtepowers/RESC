@@ -45,9 +45,19 @@ void* clientThread(void* args_p);
 // pre: none
 // post: closes socket
 
-void ProcessMessage(int clientSock);
+void ProcessClient(int clientSock);
 // Function handles chat portion of application.
 // pre: clientSock must be established
+// post: none
+
+void* trackerThread(void* args_p);
+// Function serves as the entry point to a new tracker thread.
+// pre: none
+// post: closes socket
+
+void ProcessTracker(int trackerSock);
+// Function handles chat organization.
+// pre: trackerSock must be established
 // post: none
 
 int main(int argNum, char* argValues[]){
@@ -144,7 +154,7 @@ void* clientThread(void* args_p) {
   pthread_detach(pthread_self());
 
   // Handle chat
-  ProcessMessage(clientSock);
+  ProcessClient(clientSock);
 
   // Close Client socket
   close(clientSock);
@@ -153,7 +163,7 @@ void* clientThread(void* args_p) {
   pthread_exit(NULL);
 }
 
-void ProcessMessage(int clientSock) {
+void ProcessClient(int clientSock) {
 	// Locals
 	string clientMsg = "";
 	fd_set clientfd;
@@ -192,6 +202,79 @@ void ProcessMessage(int clientSock) {
 		  }
 		  
 		  clientMsg = GetMessage(clientSock, msgLength);
+		  if (clientMsg == "") {
+			cerr << "Couldn't get message from Client." << endl;
+			break;
+		  }
+		  tmp = "Client Said: ";
+		  tmp.append(clientMsg);
+		  cout << tmp << endl;
+		  tmp.clear();
+		  
+		}
+	}
+	  cout << "Closing Thread." << endl;
+}
+
+void* trackerThread(void* args_p) {
+  
+  // Local Variables
+  threadArgs* tmp = (threadArgs*) args_p;
+  int trackerSock = tmp -> clientSock;
+  delete tmp;
+
+  // Detach Thread to ensure that resources are deallocated on return.
+  pthread_detach(pthread_self());
+
+  // Handle chat
+  ProcessTracker(trackerSock);
+
+  // Close Client socket
+  close(trackerSock);
+
+  // Quit thread
+  pthread_exit(NULL);
+}
+
+void ProcessTracker(int trackerSock) {
+	// Locals
+	string clientMsg = "";
+	fd_set clientfd;
+	struct timeval tv;
+	int sockIndex = 0;
+	
+	// Clear FD_Set and set timeout.
+	FD_ZERO(&clientfd);
+	tv.tv_sec = 2;
+	tv.tv_usec = 100000;
+
+	// Initialize Data
+	FD_SET(trackerSock, &clientfd);
+	sockIndex = trackerSock + 1;
+	
+	while (clientMsg != "/quit") {
+		// Send Data
+		if (clientMsg != "") {
+			string response = "Server has listened!\n";
+			SendInteger(trackerSock, response.length()+1);
+			SendMessage(trackerSock, response);
+			clientMsg.clear();
+		}
+		
+		// Read Data
+		int pollSock = select(sockIndex, &clientfd, NULL, NULL, &tv);
+		tv.tv_sec = 1;
+		tv.tv_usec = 100000;
+		FD_SET(clientSock, &clientfd);
+		if (pollSock != 0 && pollSock != -1) {
+		  string tmp;
+		  long msgLength = GetInteger(trackerSock);
+		  if (msgLength <= 0) {
+			cerr << "Couldn't get integer from Client." << endl;
+			break;
+		  }
+		  
+		  clientMsg = GetMessage(trackerSock, msgLength);
 		  if (clientMsg == "") {
 			cerr << "Couldn't get message from Client." << endl;
 			break;

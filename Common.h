@@ -37,6 +37,66 @@ namespace RESC {
 	};
 // CORE DATA HELPERS
 	Msg ProcessText(string message) {
+	  // Turn
+	  // "/msg user blahblahbah"
+	  // into
+	  // (blahblahblah, /msg, user)
+	  
+	  Msg tmp;
+	  const char * message_c = message.c_str();
+
+	  if (message_c[0] == '/') {
+		// Was a Command, Let's figure out what it was.
+		int cmdSize = 0;
+		for (int i = 1; i < message.length(); i++) {
+		  if (message_c[i] == ' ') {
+			cmdSize = i;
+			break;
+		  }
+		}
+		if (cmdSize == 0) {
+		  // must be a non-argument command.
+		  cmdSize = message.length();
+		}
+		// Build Command name
+		for (int i = 0; i < cmdSize; i++) {
+		  stringstream ss;
+		  ss << message_c[i];
+		  tmp.Command = ss.str();
+		}
+		
+		// Determine the To User. 
+		int userSize = 0;
+		if (tmp.Command == "/msg") {
+		  // Need to grab user information.
+		  for (int i = cmdSize+1; i < message.length(); i++) {
+			if (message_c[i] == ' ' ) {
+			  userSize = i;
+			  break;
+			}
+		  }
+		  if (userSize == 0) {
+			// 
+			userSize = message.length();
+		  }
+
+		  // Build the To portion
+		  for (int i = cmdSize+1; i < userSize; i++) {
+			stringstream ss;
+			ss << message_c[i];
+			tmp.To = ss.str();
+		  }
+	
+		  // Set our values (the 3 is including the characters for / and the two spaces
+		  message.replace(0, userSize+cmdSize-3, "");
+		  tmp.Text = message;
+		}
+	  } else {
+		tmp.To = "all";
+		tmp.Command = "/all";
+	  }
+	  
+	  return tmp;
 	}
 
 
