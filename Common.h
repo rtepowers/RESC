@@ -33,10 +33,10 @@ namespace RESC {
 	};
 
 	struct User {
-		string username;
+		string Username;
 	};
 // CORE DATA HELPERS
-	Msg ProcessText(string message) {
+	Msg ProcessMessage(string message) {
 	  // Turn
 	  // "/msg user blahblahbah"
 	  // into

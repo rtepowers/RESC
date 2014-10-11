@@ -81,6 +81,10 @@ void DisplayData (int hostSock);
 // pre: none
 // post: none
 
+bool hasAuthenticated (int hostSock, string &username);
+// Function handles authentication with server.
+// pre: none
+// post: none
 
 int main (int argNum, char* argValues[]) {
 
@@ -122,6 +126,8 @@ int main (int argNum, char* argValues[]) {
   
   // Login State
   // TODO: Figure out Authentication?
+  while (!hasAuthenticated(serverSock, username)) {
+  }
   string welcomeMsg = "\nWelcome to RESC!\n\n";
   displayMsg(welcomeMsg);
   wrefresh(INPUT_SCREEN);
@@ -402,4 +408,62 @@ bool getUserInput(string& inputStr, bool isPwd) {
     }
   }
   return success;
+}
+
+bool hasAuthenticated (int hostSock, string &username) {
+
+  // Locals
+  string loginMsg = "////////////////////////////////////////////////////////\nPlease enter your username.\nThe system will create a new account if your username could not be found.\n";
+  string pwdMsg = "/\b\nPassword.\n";
+  string clearScr = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
+  string userName;
+  string userPwd;
+  long responseLen = 0;
+  string hostResponse;
+
+  // Reset Screen
+  displayMsg(clearScr);
+  wrefresh(INPUT_SCREEN);
+  clearInputScreen();
+
+  // Get UserName
+  displayMsg(loginMsg);
+  wrefresh(INPUT_SCREEN);
+  while (!getUserInput(userName, false)) {
+  }
+  clearInputScreen();
+
+  // Get Password
+  displayMsg(pwdMsg);
+  wrefresh(INPUT_SCREEN);
+  while (!getUserInput(userPwd, true)) {
+  }
+  clearInputScreen();
+
+  // Reset Screen
+  displayMsg(clearScr);
+  wrefresh(INPUT_SCREEN);
+  clearInputScreen();
+  
+  // Send Data
+  SendInteger(hostSock, userName.length()+1);
+  SendMessage(hostSock, userName);
+  //SendInteger(hostSock, userPwd.length()+1);
+  //SendMessage(hostSock, userPwd);
+
+  // Receive Data
+  responseLen = GetInteger(hostSock);
+  hostResponse = GetMessage(hostSock, responseLen);
+
+  // Evaluate Host Response
+  if (hostResponse == "Login Successful!\n") {
+    // Login Sucessful!
+    username = userName;
+    return true;
+  } else {
+    // Login Failed
+    return false;
+    
+  }
+
 }

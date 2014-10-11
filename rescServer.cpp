@@ -39,9 +39,12 @@ struct threadArgs {
 
 // GLOBALS
 const int MAXPENDING = 20;
+unordered_map<string, User> UserList;
 deque<Msg> MsgQueue;
 pthread_mutex_t MsgQueueLock;
 int MsgQueueStatus = pthread_mutex_init(&MsgQueueLock, NULL);
+pthread_mutex_t UserListLock;
+int UserListStatus = pthread_mutex_init(&UserListLock, NULL);
 
 // Function Prototypes
 void* clientThread(void* args_p);
@@ -71,6 +74,11 @@ void AddClientMessage(Msg newMessage);
 
 string GetClientMessages(User user);
 // Function handles the gathering of messages to a particular user
+// pre: none
+// post: none
+
+void BroadcastMessage(string message);
+// Function handles broadcasting messages.
 // pre: none
 // post: none
 
@@ -193,6 +201,30 @@ void ProcessClient(int clientSock) {
 	struct timeval tv;
 	int sockIndex = 0;
 	
+	
+	// Need to establish Client User
+	  // Login loop
+	User clientUser;
+	bool hasEntered = false;
+	long userNameLength = GetInteger(clientSock);
+	clientUser.Username = GetMessage(clientSock, userNameLength);
+	
+	pthread_mutex_lock(&UserListLock);
+	unordered_map<string, User>::iterator it = UserList.find(clientUser.Username);
+	if (it == UserList.end()) {
+		// User not in list.
+		UserList.insert(make_pair<string, User> (clientUser.Username, clientUser));
+		hasEntered = true;
+	}
+	pthread_mutex_unlock(&UserListLock);
+	
+	if (hasEntered) {
+		string synAcked = "Login Successful!\n";
+		SendInteger(clientSock, synAcked.length()+1);
+		SendMessage(clientSock, synAcked);
+		cout << "Logged in as: " << clientUser.Username << endl;
+	}
+	
 	// Clear FD_Set and set timeout.
 	FD_ZERO(&clientfd);
 	tv.tv_sec = 2;
@@ -236,7 +268,11 @@ void ProcessClient(int clientSock) {
 		  
 		}
 	}
-	  cout << "Closing Thread." << endl;
+	pthread_mutex_lock(&UserListLock);
+	UserList.erase(clientUser.Username);
+	pthread_mutex_unlock(&UserListLock);
+	
+	cout << "Closing Thread." << endl;
 }
 
 void* trackerThread(void* args_p) {
@@ -312,12 +348,23 @@ string GetClientMessages(User user) {
 	stringstream ss;
 	pthread_mutex_lock(&MsgQueueLock);
 	for (int i = 0; i < MsgQueue.size(); i++) {
-		if (MsgQueue[i].Command == "/all") {
-			// Message was intended for all users.
-			ss << MsgQueue[i].Text << endl;
-			MsgQueue.erase
+		if (MsgQueue[i].To == user.Username) {
+			if (MsgQueue[i].Command == "/all") {
+				// Message was intended for all users.
+				ss << MsgQueue[i].Text << endl;
+				MsgQueue.erase(MsgQueue.begin()+i);
+				i--;
+			}
 		}
 	}
 	pthread_mutex_unlock(&MsgQueueLock);
 	return ss.str();
+}
+
+void BroadcastMessage(string message) {
+
+	Msg tmp = ProcessMessage(message);
+	pthread_mutex_lock(&MsgQueueLock);
+	
+	pthread_mutex_lock(&MsgQueueLock);
 }

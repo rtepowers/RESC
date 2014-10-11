@@ -209,8 +209,8 @@ void ProcessRequest(int requestSock) {
 	tv.tv_usec = 100000;
 
 	// Initialize Data
-	FD_SET(trackerSock, &trackerfd);
-	sockIndex = trackerSock + 1;
+	FD_SET(requestSock, &trackerfd);
+	sockIndex = requestSock + 1;
 	
 	while (true) {
 		// Send Data
@@ -220,15 +220,15 @@ void ProcessRequest(int requestSock) {
 		int pollSock = select(sockIndex, &trackerfd, NULL, NULL, &tv);
 		tv.tv_sec = 1;
 		tv.tv_usec = 100000;
-		FD_SET(trackerSock, &trackerfd);
+		FD_SET(requestSock, &trackerfd);
 		if (pollSock != 0 && pollSock != -1) {
-		  long msgLength = GetInteger(trackerSock);
+		  long msgLength = GetInteger(requestSock);
 		  if (msgLength <= 0) {
 			cerr << "Couldn't get integer from Client." << endl;
 			break;
 		  }
 	  
-		  string trackerMsg = GetMessage(trackerSock, msgLength);
+		  string trackerMsg = GetMessage(requestSock, msgLength);
 		  if (trackerMsg == "") {
 			cerr << "Couldn't get message from Client." << endl;
 			break;
