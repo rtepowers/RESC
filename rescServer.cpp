@@ -111,7 +111,16 @@ int main(int argNum, char* argValues[]){
   string currentHostName = currentHostName_c;
   SendInteger(trackerSock, currentHostName.length()+1);
   SendMessage(trackerSock, currentHostName);
-  close(trackerSock);
+  struct threadArgs* args_t = new threadArgs;
+  args_t -> clientSock = trackerSock;
+  pthread_t trackID;
+  int trackStatus = pthread_create(&trackID, NULL, trackerThread, (void*)args_t);
+  if (trackStatus != 0) {
+  	// Failed to create tracker thread
+  	cerr << "Failed to open tracker thread." << endl;
+  	close(trackerSock);
+  	pthread_exit(NULL);
+  }
   
   cout << endl << endl << "RESC SERVER: Ready to accept connections. " << endl;
 
@@ -238,52 +247,41 @@ void* trackerThread(void* args_p) {
 
 void ProcessTracker(int trackerSock) {
 	// Locals
-	string clientMsg = "";
-	fd_set clientfd;
+	fd_set trackerfd;
 	struct timeval tv;
 	int sockIndex = 0;
 	
 	// Clear FD_Set and set timeout.
-	FD_ZERO(&clientfd);
+	FD_ZERO(&trackerfd);
 	tv.tv_sec = 2;
 	tv.tv_usec = 100000;
 
 	// Initialize Data
-	FD_SET(trackerSock, &clientfd);
+	FD_SET(trackerSock, &trackerfd);
 	sockIndex = trackerSock + 1;
 	
-	while (clientMsg != "/quit") {
+	while (true) {
 		// Send Data
-		if (clientMsg != "") {
-			string response = "Server has listened!\n";
-			SendInteger(trackerSock, response.length()+1);
-			SendMessage(trackerSock, response);
-			clientMsg.clear();
-		}
+		// Grab from MsgQueue
 		
 		// Read Data
-		int pollSock = select(sockIndex, &clientfd, NULL, NULL, &tv);
+		int pollSock = select(sockIndex, &trackerfd, NULL, NULL, &tv);
 		tv.tv_sec = 1;
 		tv.tv_usec = 100000;
-		FD_SET(clientSock, &clientfd);
+		FD_SET(trackerSock, &trackerfd);
 		if (pollSock != 0 && pollSock != -1) {
-		  string tmp;
 		  long msgLength = GetInteger(trackerSock);
 		  if (msgLength <= 0) {
 			cerr << "Couldn't get integer from Client." << endl;
 			break;
 		  }
 		  
-		  clientMsg = GetMessage(trackerSock, msgLength);
-		  if (clientMsg == "") {
+		  string trackerMsg = GetMessage(trackerSock, msgLength);
+		  if (trackerMsg == "") {
 			cerr << "Couldn't get message from Client." << endl;
 			break;
 		  }
-		  tmp = "Client Said: ";
-		  tmp.append(clientMsg);
-		  cout << tmp << endl;
-		  tmp.clear();
-		  
+		  cout << "Message from Tracker: " << trackerMsg << endl;
 		}
 	}
 	  cout << "Closing Thread." << endl;
