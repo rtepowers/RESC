@@ -10,6 +10,8 @@
 #include<string>
 #include<ctime>
 #include<cstdlib>
+#include<queue>
+#include<unordered_map>
 
 // Network Functions
 #include<sys/types.h>
@@ -24,24 +26,25 @@
 // Multithreading
 #include<pthread.h>
 
+// RESC Library
+#include "Common.h"
+
 using namespace std;
+using namespace RESC;
 
 // DATA TYPES
 struct threadArgs {
   int clientSock;
 };
 
-struct User {
-// TODO: Determine what a User is. Classify?
-};
-
-struct Msg {
-// TODO: Determine what a Msg is. Classify?
-};
-
 // GLOBALS
 const int MAXPENDING = 20;
-
+unordered_map<string, User> UserList;
+deque<Msg> MsgQueue;
+pthread_mutex_t MsgQueueLock;
+int MsgQueueStatus = pthread_mutex_init(&MsgQueueLock, NULL);
+pthread_mutex_t UserListLock;
+int UserListStatus = pthread_mutex_init(&UserListLock, NULL);
 
 // Function Prototypes
 void* clientThread(void* args_p);
@@ -49,34 +52,34 @@ void* clientThread(void* args_p);
 // pre: none
 // post: closes socket
 
-void ProcessMessage(int clientSock);
+void ProcessClient(int clientSock);
 // Function handles chat portion of application.
 // pre: clientSock must be established
 // post: none
 
-int openSocket (string hostName, unsigned short serverPort);
-// Function sets up a working socket to use in sending data.
+void* trackerThread(void* args_p);
+// Function serves as the entry point to a new tracker thread.
+// pre: none
+// post: closes socket
+
+void ProcessTracker(int trackerSock);
+// Function handles chat organization.
+// pre: trackerSock must be established
+// post: none
+
+void AddClientMessage(Msg newMessage);
+// Function handles adding new messages to queue
 // pre: none
 // post: none
 
-bool SendMessage(int HostSock, string msg);
-// Function sends message to Host socket.
-// pre: HostSock should exist.
+string GetClientMessages(User user);
+// Function handles the gathering of messages to a particular user
+// pre: none
 // post: none
 
-string GetMessage(int HostSock, int messageLength);
-// Function retrieves message from Host socket.
-// pre: HostSock should exist.
-// post: none
-
-bool SendInteger(int HostSock, int hostInt);
-// Function sends a network long variable over the network.
-// pre: HostSock must exist
-// post: none
-
-long GetInteger(int HostSocks);
-// Function listens to socket for a network Long variable.
-// pre: HostSock must exist.
+void BroadcastMessage(string message, string username);
+// Function handles broadcasting messages.
+// pre: none
 // post: none
 
 int main(int argNum, char* argValues[]){
@@ -130,7 +133,16 @@ int main(int argNum, char* argValues[]){
   string currentHostName = currentHostName_c;
   SendInteger(trackerSock, currentHostName.length()+1);
   SendMessage(trackerSock, currentHostName);
-  close(trackerSock);
+  struct threadArgs* args_t = new threadArgs;
+  args_t -> clientSock = trackerSock;
+  pthread_t trackID;
+  int trackStatus = pthread_create(&trackID, NULL, trackerThread, (void*)args_t);
+  if (trackStatus != 0) {
+  	// Failed to create tracker thread
+  	cerr << "Failed to open tracker thread." << endl;
+  	close(trackerSock);
+  	pthread_exit(NULL);
+  }
   
   cout << endl << endl << "RESC SERVER: Ready to accept connections. " << endl;
 
@@ -173,7 +185,7 @@ void* clientThread(void* args_p) {
   pthread_detach(pthread_self());
 
   // Handle chat
-  ProcessMessage(clientSock);
+  ProcessClient(clientSock);
 
   // Close Client socket
   close(clientSock);
@@ -182,12 +194,36 @@ void* clientThread(void* args_p) {
   pthread_exit(NULL);
 }
 
-void ProcessMessage(int clientSock) {
+void ProcessClient(int clientSock) {
 	// Locals
 	string clientMsg = "";
 	fd_set clientfd;
 	struct timeval tv;
 	int sockIndex = 0;
+	
+	
+	// Need to establish Client User
+	  // Login loop
+	User clientUser;
+	bool hasEntered = false;
+	long userNameLength = GetInteger(clientSock);
+	clientUser.Username = GetMessage(clientSock, userNameLength);
+	
+	pthread_mutex_lock(&UserListLock);
+	unordered_map<string, User>::iterator it = UserList.find(clientUser.Username);
+	if (it == UserList.end()) {
+		// User not in list.
+		UserList.insert(make_pair<string, User> (clientUser.Username, clientUser));
+		hasEntered = true;
+	}
+	pthread_mutex_unlock(&UserListLock);
+	
+	if (hasEntered) {
+		string synAcked = "Login Successful!\n";
+		SendInteger(clientSock, synAcked.length()+1);
+		SendMessage(clientSock, synAcked);
+		cout << "Logged in as: " << clientUser.Username << endl;
+	}
 	
 	// Clear FD_Set and set timeout.
 	FD_ZERO(&clientfd);
@@ -200,11 +236,16 @@ void ProcessMessage(int clientSock) {
 	
 	while (clientMsg != "/quit") {
 		// Send Data
-		if (clientMsg != "") {
-			string response = "Server has listened!\n";
-			SendInteger(clientSock, response.length()+1);
-			SendMessage(clientSock, response);
-			clientMsg.clear();
+		string messages = GetClientMessages(clientUser);
+		if (messages != "") {
+			if (!SendInteger(clientSock, messages.length()+1)) {
+				cerr << "Unable to send Int. " << endl;
+				break;
+			}
+			if (!SendMessage(clientSock, messages)) {
+				cerr << "Unable to send messages" << endl;
+				break;
+			}
 		}
 		
 		// Read Data
@@ -213,7 +254,6 @@ void ProcessMessage(int clientSock) {
 		tv.tv_usec = 100000;
 		FD_SET(clientSock, &clientfd);
 		if (pollSock != 0 && pollSock != -1) {
-		  string tmp;
 		  long msgLength = GetInteger(clientSock);
 		  if (msgLength <= 0) {
 			cerr << "Couldn't get integer from Client." << endl;
@@ -225,129 +265,119 @@ void ProcessMessage(int clientSock) {
 			cerr << "Couldn't get message from Client." << endl;
 			break;
 		  }
-		  tmp = "Client Said: ";
-		  tmp.append(clientMsg);
-		  cout << tmp << endl;
-		  tmp.clear();
+		  BroadcastMessage(clientMsg, clientUser.Username);
 		  
+		}
+	}
+	pthread_mutex_lock(&UserListLock);
+	UserList.erase(clientUser.Username);
+	pthread_mutex_unlock(&UserListLock);
+	
+	cout << "Closing Thread." << endl;
+}
+
+void* trackerThread(void* args_p) {
+  
+  // Local Variables
+  threadArgs* tmp = (threadArgs*) args_p;
+  int trackerSock = tmp -> clientSock;
+  delete tmp;
+
+  // Detach Thread to ensure that resources are deallocated on return.
+  pthread_detach(pthread_self());
+
+  // Handle chat
+  ProcessTracker(trackerSock);
+
+  // Close Client socket
+  close(trackerSock);
+
+  // Quit thread
+  pthread_exit(NULL);
+}
+
+void ProcessTracker(int trackerSock) {
+	// Locals
+	fd_set trackerfd;
+	struct timeval tv;
+	int sockIndex = 0;
+	
+	// Clear FD_Set and set timeout.
+	FD_ZERO(&trackerfd);
+	tv.tv_sec = 2;
+	tv.tv_usec = 100000;
+
+	// Initialize Data
+	FD_SET(trackerSock, &trackerfd);
+	sockIndex = trackerSock + 1;
+	
+	while (true) {
+		// Send Data
+		// Grab from MsgQueue
+		
+		// Read Data
+		int pollSock = select(sockIndex, &trackerfd, NULL, NULL, &tv);
+		tv.tv_sec = 1;
+		tv.tv_usec = 100000;
+		FD_SET(trackerSock, &trackerfd);
+		if (pollSock != 0 && pollSock != -1) {
+		  long msgLength = GetInteger(trackerSock);
+		  if (msgLength <= 0) {
+			cerr << "Couldn't get integer from Client." << endl;
+			break;
+		  }
+		  
+		  string trackerMsg = GetMessage(trackerSock, msgLength);
+		  if (trackerMsg == "") {
+			cerr << "Couldn't get message from Client." << endl;
+			break;
+		  }
+		  cout << "Message from Tracker: " << trackerMsg << endl;
 		}
 	}
 	  cout << "Closing Thread." << endl;
 }
 
-int openSocket (string hostName, unsigned short serverPort) {
 
-  // Local variables.
-  struct hostent* host;
-  int status;
-  int bytesRecv;
-
-  // Create a socket and start server communications.
-  int hostSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (hostSock <= 0) {
-    // Socket was unsuccessful.
-    cerr << "Socket was unable to be opened." << endl;
-    return -1;
-  }
-
-  // Get host IP and Set proper fields
-  host = gethostbyname(hostName.c_str());
-  if (!host) {
-    cerr << "Unable to resolve hostname's ip address. Exiting..." << endl;
-    return -1;
-  }
-  char* tmpIP = inet_ntoa( *(struct in_addr *)host->h_addr_list[0]);
-  unsigned long serverIP;
-  status = inet_pton(AF_INET, tmpIP,(void*) &serverIP);
-  if (status <= 0) return -1;
-
-  struct sockaddr_in serverAddress;
-  serverAddress.sin_family = AF_INET;
-  serverAddress.sin_addr.s_addr = serverIP ;
-  serverAddress.sin_port = htons(serverPort);
-
-  // Now that we have the proper information, we can open a connection.
-  status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
-  if (status < 0) {
-    cerr << "Error with the connection." << endl;
-    return -1;
-  }
-
-  return hostSock;
+void AddClientMessage(Msg newMessage) {
+	pthread_mutex_lock(&MsgQueueLock);
+	MsgQueue.push_back(newMessage);
+	pthread_mutex_unlock(&MsgQueueLock);
+	cout << "Added message: " << newMessage.Text << endl;
 }
 
-
-bool SendMessage(int HostSock, string msg) {
-
-  // Local Variables
-  int msgLength = msg.length()+1;
-  char msgBuff[msgLength];
-  strcpy(msgBuff, msg.c_str());
-  msgBuff[msgLength-1] = '\0';
-
-  // Since they now know how many bytes to receive, we'll send the message
-  int msgSent = send(HostSock, msgBuff, msgLength, 0);
-  if (msgSent != msgLength){
-    // Failed to send
-    cerr << "Unable to send data. Closing clientSocket: " << HostSock << "." << endl;
-    return false;
-  }
-
-  return true;
+string GetClientMessages(User user) {
+	stringstream ss;
+	pthread_mutex_lock(&MsgQueueLock);
+	for (int i = 0; i < MsgQueue.size(); i++) {
+		if (MsgQueue[i].To == user.Username) {
+			if (MsgQueue[i].Command == "/all") {
+				// Message was intended for all users.
+				ss << MsgQueue[i].Text << endl;
+				MsgQueue.erase(MsgQueue.begin()+i);
+				i--;
+			} else {
+				ss << MsgQueue[i].Text << endl;
+				MsgQueue.erase(MsgQueue.begin()+i);
+				i--;
+			}
+		}
+	}
+	pthread_mutex_unlock(&MsgQueueLock);
+	return ss.str();
 }
 
-string GetMessage(int HostSock, int messageLength) {
-
-  // Retrieve msg
-  int bytesLeft = messageLength;
-  char buffer[messageLength];
-  char* buffPTR = buffer;
-  while (bytesLeft > 0){
-    int bytesRecv = recv(HostSock, buffPTR, messageLength, 0);
-    if (bytesRecv <= 0) {
-      // Failed to Read for some reason.
-      cerr << "Could not recv bytes. Closing clientSocket: " << HostSock << "." << endl;
-      return "";
+void BroadcastMessage(string message, string userName) {
+	Msg tmp = ProcessMessage(message);
+	tmp.From = userName;
+	pthread_mutex_lock(&UserListLock);
+	unordered_map<string, User>::iterator got = UserList.begin();
+    for ( ; got != UserList.end(); got++) {
+      if ((got)->second.Username != userName) {
+		// Send them a message.
+		tmp.To = (got)->second.Username;
+		AddClientMessage(tmp);
+      }
     }
-    bytesLeft = bytesLeft - bytesRecv;
-    buffPTR = buffPTR + bytesRecv;
-  }
-
-  return buffer;
-}
-
-long GetInteger(int HostSock) {
-
-  // Retreive length of msg
-  int bytesLeft = sizeof(long);
-  long networkInt;
-  char* bp = (char *) &networkInt;
-  
-  while (bytesLeft) {
-    int bytesRecv = recv(HostSock, bp, bytesLeft, 0);
-    if (bytesRecv <= 0){
-      // Failed to receive bytes
-      cerr << "Failed to receive bytes. Closing clientSocket: " << HostSock << "." << endl;
-      return -1;
-    }
-    bytesLeft = bytesLeft - bytesRecv;
-    bp = bp + bytesRecv;
-  }
-  return ntohl(networkInt);
-}
-
-bool SendInteger(int HostSock, int hostInt) {
-
-  // Local Variables
-  long networkInt = htonl(hostInt);
-
-  // Send Integer (as a long)
-  int didSend = send(HostSock, &networkInt, sizeof(long), 0);
-  if (didSend != sizeof(long)){
-    // Failed to Send
-    cerr << "Unable to send data. Closing clientSocket: " << HostSock << "."  << endl;
-    return false;
-  }
-
-  return true;
+	pthread_mutex_lock(&UserListLock);
 }

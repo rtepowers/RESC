@@ -27,7 +27,11 @@
 // Multithreading
 #include<pthread.h>
 
+// RESC Library
+#include "Common.h"
+
 using namespace std;
+using namespace RESC;
 
 // GLOBALS
 const int INPUT_LINES = 3;
@@ -62,33 +66,8 @@ void prepareWindows();
 // pre: none
 // post: none
 
-bool SendMessage(int HostSock, string msg);
-// Function sends message to Host socket.
-// pre: HostSock should exist.
-// post: none
-
-string GetMessage(int HostSock, int messageLength);
-// Function retrieves message from Host socket.
-// pre: HostSock should exist.
-// post: none
-
-bool SendInteger(int HostSock, int hostInt);
-// Function sends a network long variable over the network.
-// pre: HostSock must exist
-// post: none
-
-long GetInteger(int HostSocks);
-// Function listens to socket for a network Long variable.
-// pre: HostSock must exist.
-// post: none
-
 void* clientThread(void* args_p);
 // Function serves as the entry point to a new thread.
-// pre: none
-// post: none
-
-int openSocket (string hostName, unsigned short serverPort);
-// Function sets up a working socket to use in sending data.
 // pre: none
 // post: none
 
@@ -102,6 +81,10 @@ void DisplayData (int hostSock);
 // pre: none
 // post: none
 
+bool hasAuthenticated (int hostSock, string &username);
+// Function handles authentication with server.
+// pre: none
+// post: none
 
 int main (int argNum, char* argValues[]) {
 
@@ -128,10 +111,8 @@ int main (int argNum, char* argValues[]) {
   // Begin User Interface
   prepareWindows();
 
-  // Establish a socket Connection
+  // Get a chat server
   hostSock = openSocket(hostname, serverPort+1);
-  
-  // Get A Chat Server 
   string identifier = "CLIENT";
   SendInteger(hostSock, identifier.length()+1);
   SendMessage(hostSock, identifier);
@@ -139,10 +120,12 @@ int main (int argNum, char* argValues[]) {
   string serverName = GetMessage(hostSock, serverNameLength);
   close(hostSock);
   
+  // Connect to Chat Server
   int serverSock = openSocket(serverName, serverPort);
   
   // Login State
-  // TODO: Figure out Authentication?
+  while (!hasAuthenticated(serverSock, username)) {
+  }
   string welcomeMsg = "\nWelcome to RESC!\n\n";
   displayMsg(welcomeMsg);
   wrefresh(INPUT_SCREEN);
@@ -207,81 +190,6 @@ int main (int argNum, char* argValues[]) {
   close(hostSock);
 
   exit(-1);
-}
-
-bool SendMessage(int HostSock, string msg) {
-
-  // Local Variables
-  int msgLength = msg.length()+1;
-  char msgBuff[msgLength];
-  strcpy(msgBuff, msg.c_str());
-  msgBuff[msgLength-1] = '\0';
-
-  // Since they now know how many bytes to receive, we'll send the message
-  int msgSent = send(HostSock, msgBuff, msgLength, 0);
-  if (msgSent != msgLength){
-    // Failed to send
-    cerr << "Unable to send data. Closing clientSocket: " << HostSock << "." << endl;
-    return false;
-  }
-
-  return true;
-}
-
-string GetMessage(int HostSock, int messageLength) {
-
-  // Retrieve msg
-  int bytesLeft = messageLength;
-  char buffer[messageLength];
-  char* buffPTR = buffer;
-  while (bytesLeft > 0){
-    int bytesRecv = recv(HostSock, buffPTR, messageLength, 0);
-    if (bytesRecv <= 0) {
-      // Failed to Read for some reason.
-      cerr << "Could not recv bytes. Closing clientSocket: " << HostSock << "." << endl;
-      return "";
-    }
-    bytesLeft = bytesLeft - bytesRecv;
-    buffPTR = buffPTR + bytesRecv;
-  }
-
-  return buffer;
-}
-
-long GetInteger(int HostSock) {
-
-  // Retreive length of msg
-  int bytesLeft = sizeof(long);
-  long networkInt;
-  char* bp = (char *) &networkInt;
-  
-  while (bytesLeft) {
-    int bytesRecv = recv(HostSock, bp, bytesLeft, 0);
-    if (bytesRecv <= 0){
-      // Failed to receive bytes
-      cerr << "Failed to receive bytes. Closing clientSocket: " << HostSock << "." << endl;
-      return -1;
-    }
-    bytesLeft = bytesLeft - bytesRecv;
-    bp = bp + bytesRecv;
-  }
-  return ntohl(networkInt);
-}
-
-bool SendInteger(int HostSock, int hostInt) {
-
-  // Local Variables
-  long networkInt = htonl(hostInt);
-
-  // Send Integer (as a long)
-  int didSend = send(HostSock, &networkInt, sizeof(long), 0);
-  if (didSend != sizeof(long)){
-    // Failed to Send
-    cerr << "Unable to send data. Closing clientSocket: " << HostSock << "."  << endl;
-    return false;
-  }
-
-  return true;
 }
 
 void prepareWindows() {
@@ -498,4 +406,53 @@ bool getUserInput(string& inputStr, bool isPwd) {
     }
   }
   return success;
+}
+
+bool hasAuthenticated (int hostSock, string &username) {
+
+  // Locals
+  string loginMsg = "////////////////////////////////////////////////////////\nPlease enter your username.\nThe system will create a new account if your username could not be found.\n";
+  string clearScr = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
+  string userName;
+  long responseLen = 0;
+  string hostResponse;
+
+  // Reset Screen
+  displayMsg(clearScr);
+  wrefresh(INPUT_SCREEN);
+  clearInputScreen();
+
+  // Get UserName
+  displayMsg(loginMsg);
+  wrefresh(INPUT_SCREEN);
+  while (!getUserInput(userName, false)) {
+  }
+  clearInputScreen();
+
+  // Reset Screen
+  displayMsg(clearScr);
+  wrefresh(INPUT_SCREEN);
+  clearInputScreen();
+  
+  // Send Data
+  SendInteger(hostSock, userName.length()+1);
+  SendMessage(hostSock, userName);
+  //SendInteger(hostSock, userPwd.length()+1);
+  //SendMessage(hostSock, userPwd);
+
+  // Receive Data
+  responseLen = GetInteger(hostSock);
+  hostResponse = GetMessage(hostSock, responseLen);
+
+  // Evaluate Host Response
+  if (hostResponse == "Login Successful!\n") {
+    // Login Sucessful!
+    username = userName;
+    return true;
+  } else {
+    // Login Failed
+    return false;
+    
+  }
+
 }
