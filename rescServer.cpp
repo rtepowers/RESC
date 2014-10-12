@@ -254,6 +254,7 @@ void ProcessClient(int clientSock) {
 		tv.tv_usec = 100000;
 		FD_SET(clientSock, &clientfd);
 		if (pollSock != 0 && pollSock != -1) {
+		  string tmp;
 		  long msgLength = GetInteger(clientSock);
 		  if (msgLength <= 0) {
 			cerr << "Couldn't get integer from Client." << endl;
@@ -265,6 +266,10 @@ void ProcessClient(int clientSock) {
 			cerr << "Couldn't get message from Client." << endl;
 			break;
 		  }
+		  tmp = "Client said: ";
+		  tmp.append(clientMsg);
+		  cout << tmp << endl;
+		  
 		  BroadcastMessage(clientMsg, clientUser.Username);
 		  
 		}
@@ -343,7 +348,6 @@ void AddClientMessage(Msg newMessage) {
 	pthread_mutex_lock(&MsgQueueLock);
 	MsgQueue.push_back(newMessage);
 	pthread_mutex_unlock(&MsgQueueLock);
-	cout << "Added message: " << newMessage.Text << endl;
 }
 
 string GetClientMessages(User user) {
@@ -370,6 +374,7 @@ string GetClientMessages(User user) {
 void BroadcastMessage(string message, string userName) {
 	Msg tmp = ProcessMessage(message);
 	tmp.From = userName;
+	tmp.Text = userName + " said:" + tmp.Text;
 	pthread_mutex_lock(&UserListLock);
 	unordered_map<string, User>::iterator got = UserList.begin();
     for ( ; got != UserList.end(); got++) {
@@ -379,5 +384,5 @@ void BroadcastMessage(string message, string userName) {
 		AddClientMessage(tmp);
       }
     }
-	pthread_mutex_lock(&UserListLock);
+	pthread_mutex_unlock(&UserListLock);
 }
