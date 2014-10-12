@@ -13,6 +13,7 @@
 #include<ctime>
 #include<cstdlib>
 #include<queue>
+#include<unordered_map>
 
 // Network Functions
 #include<sys/types.h>
@@ -47,6 +48,12 @@ const int MAXPENDING = 20;
 queue<Server> ServerList;
 pthread_mutex_t ServerListLock;
 int ServerStatus = pthread_mutex_init(&ServerListLock, NULL);
+deque<Msg> MsgQueue;
+pthread_mutex_t MsgQueueLock;
+int MsgQueueStatus = pthread_mutex_init(&MsgQueueLock, NULL);
+unordered_map<string, Server> ServerMap;
+pthread_mutex_t ServerMapLock;
+int ServerMapStatus = pthread_mutex_init(&ServerMapLock, NULL);
 
 // Function Prototypes
 void* clientThread(void* args_p);
@@ -56,6 +63,21 @@ void* clientThread(void* args_p);
 
 void ProcessRequest(int requestSock);
 // Function process incoming request whether from client or server
+// pre: none
+// post: none
+
+void AddClientMessage(Msg message);
+// Function adds messages to MsgQueue
+// pre: none
+// post: none
+
+string GetClientMessages(string serverName);
+// Function grabs messages from other servers.
+// pre: none
+// post: none
+
+void BroadcastMessage(string message, string serverName);
+// Function handles broadcasting messages.
 // pre: none
 // post: none
 
@@ -196,6 +218,9 @@ void ProcessRequest(int requestSock) {
 		ServerList.push(newSvr);
 		cout << "Adding " << newSvr.hostName << " or " << hostname << " to pool!" << endl;
 	pthread_mutex_unlock(&ServerListLock);
+	pthread_mutex_lock(&ServerMapLock);
+		ServerMap.insert(make_pair<string, Server>(hostname, newSvr));
+	pthread_mutex_unlock(&ServerMapLock);
 	
 	// should pass messages from queue
 	// Locals
@@ -215,6 +240,17 @@ void ProcessRequest(int requestSock) {
 	while (true) {
 		// Send Data
 		// Grab from MsgQueue
+		string message = GetClientMessages(newSvr.hostName);
+		if (message != "") {
+			if (!SendInteger(requestSock, message.length()+1)) {
+				cerr << "Failed to send int. " << endl;
+				break;
+			}
+			if (!SendMessage(requestSock, message)) {
+				cerr << "Failed to send Message. " << endl;
+				break;
+			}
+		}
 	
 		// Read Data
 		int pollSock = select(sockIndex, &trackerfd, NULL, NULL, &tv);
@@ -234,9 +270,48 @@ void ProcessRequest(int requestSock) {
 			break;
 		  }
 		  cout << "Message from Tracker: " << trackerMsg << endl;
+		  BroadcastMessage(trackerMsg, newSvr.hostName);
 		}
 	}
 	cout << "Closing Thread." << endl;
 	
 	// Now send list of Peers 
+}
+
+void AddClientMessage(Msg message) {
+	pthread_mutex_lock(&MsgQueueLock);
+	MsgQueue.push_back(message);
+	pthread_mutex_unlock(&MsgQueueLock);
+}
+
+string GetClientMessages(string serverName) {
+	stringstream ss;
+	pthread_mutex_lock(&MsgQueueLock);
+	for (int i = 0; i < MsgQueue.size(); i++) {
+		if (MsgQueue[i].To == serverName) {
+			ss << MsgQueue[i].Text << endl;
+			MsgQueue.erase(MsgQueue.begin()+i);
+			i--;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&MsgQueueLock);
+	return ss.str();
+}
+
+void BroadcastMessage(string message, string serverName) {
+	Msg tmp;
+	tmp.From = serverName;
+	tmp.Text = message;
+	tmp.Command = "/all";
+	pthread_mutex_lock(&ServerMapLock);
+	unordered_map<string, Server>::iterator got = ServerMap.begin();
+    for ( ; got != ServerMap.end(); got++) {
+      if ((got)->second.hostName != serverName) {
+		// Send them a message.
+		tmp.To = (got)->second.hostName;
+		AddClientMessage(tmp);
+      }
+    }
+	pthread_mutex_unlock(&ServerMapLock);
 }
