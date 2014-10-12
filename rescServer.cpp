@@ -72,12 +72,12 @@ void AddClientMessage(Msg newMessage);
 // pre: none
 // post: none
 
-string GetClientMessages(User user);
+string GetClientMessages(User user, bool isServerMsg);
 // Function handles the gathering of messages to a particular user
 // pre: none
 // post: none
 
-void BroadcastMessage(string message, string username);
+void BroadcastMessage(string message, string username, bool isServerMsg);
 // Function handles broadcasting messages.
 // pre: none
 // post: none
@@ -236,7 +236,7 @@ void ProcessClient(int clientSock) {
 	
 	while (clientMsg != "/quit") {
 		// Send Data
-		string messages = GetClientMessages(clientUser);
+		string messages = GetClientMessages(clientUser, false);
 		if (messages != "") {
 			if (!SendInteger(clientSock, messages.length()+1)) {
 				cerr << "Unable to send Int. " << endl;
@@ -266,12 +266,9 @@ void ProcessClient(int clientSock) {
 			cerr << "Couldn't get message from Client." << endl;
 			break;
 		  }
-		  tmp = "Client said: ";
-		  tmp.append(clientMsg);
-		  cout << tmp << endl;
-		  
-		  BroadcastMessage(clientMsg, clientUser.Username);
-		  
+		  if (clientMsg != "/quit") {
+			  BroadcastMessage(clientMsg, clientUser.Username, false);
+		  }
 		}
 	}
 	pthread_mutex_lock(&UserListLock);
@@ -306,6 +303,8 @@ void ProcessTracker(int trackerSock) {
 	fd_set trackerfd;
 	struct timeval tv;
 	int sockIndex = 0;
+	User serverPool;
+	serverPool.Username = "--Server--";
 	
 	// Clear FD_Set and set timeout.
 	FD_ZERO(&trackerfd);
@@ -318,7 +317,17 @@ void ProcessTracker(int trackerSock) {
 	
 	while (true) {
 		// Send Data
-		// Grab from MsgQueue
+		string messagesToBroadcast = GetClientMessages(serverPool, true);
+		if (messagesToBroadcast.length() != 0) {
+			if (!SendInteger(trackerSock, messagesToBroadcast.length()+1)) {
+				cerr << "Unable to send Int. " << endl;
+				break;
+			}
+			if (!SendMessage(trackerSock, messagesToBroadcast)) {
+				cerr << "Unable to send Message. " << endl;
+				break;
+			}
+		}
 		
 		// Read Data
 		int pollSock = select(sockIndex, &trackerfd, NULL, NULL, &tv);
@@ -337,7 +346,7 @@ void ProcessTracker(int trackerSock) {
 			cerr << "Couldn't get message from Client." << endl;
 			break;
 		  }
-		  cout << "Message from Tracker: " << trackerMsg << endl;
+		  BroadcastMessage(trackerMsg, serverPool.Username, true);
 		}
 	}
 	  cout << "Closing Thread." << endl;
@@ -350,7 +359,7 @@ void AddClientMessage(Msg newMessage) {
 	pthread_mutex_unlock(&MsgQueueLock);
 }
 
-string GetClientMessages(User user) {
+string GetClientMessages(User user, bool isServerMsg) {
 	stringstream ss;
 	pthread_mutex_lock(&MsgQueueLock);
 	for (int i = 0; i < MsgQueue.size(); i++) {
@@ -365,16 +374,19 @@ string GetClientMessages(User user) {
 				MsgQueue.erase(MsgQueue.begin()+i);
 				i--;
 			}
+			if (isServerMsg) {
+				break;
+			}
 		}
 	}
 	pthread_mutex_unlock(&MsgQueueLock);
 	return ss.str();
 }
 
-void BroadcastMessage(string message, string userName) {
+void BroadcastMessage(string message, string userName, bool isServerMsg) {
 	Msg tmp = ProcessMessage(message);
 	tmp.From = userName;
-	tmp.Text = userName + " said:" + tmp.Text;
+	tmp.Text = userName + " said: " + tmp.Text;
 	pthread_mutex_lock(&UserListLock);
 	unordered_map<string, User>::iterator got = UserList.begin();
     for ( ; got != UserList.end(); got++) {
@@ -383,6 +395,10 @@ void BroadcastMessage(string message, string userName) {
 		tmp.To = (got)->second.Username;
 		AddClientMessage(tmp);
       }
+    }
+    if (!isServerMsg) {
+        tmp.To = "--Server--";
+    	AddClientMessage(tmp);
     }
 	pthread_mutex_unlock(&UserListLock);
 }
