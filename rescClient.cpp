@@ -111,10 +111,8 @@ int main (int argNum, char* argValues[]) {
   // Begin User Interface
   prepareWindows();
 
-  // Establish a socket Connection
+  // Get a chat server
   hostSock = openSocket(hostname, serverPort+1);
-  
-  // Get A Chat Server 
   string identifier = "CLIENT";
   SendInteger(hostSock, identifier.length()+1);
   SendMessage(hostSock, identifier);
@@ -122,10 +120,10 @@ int main (int argNum, char* argValues[]) {
   string serverName = GetMessage(hostSock, serverNameLength);
   close(hostSock);
   
+  // Connect to Chat Server
   int serverSock = openSocket(serverName, serverPort);
   
   // Login State
-  // TODO: Figure out Authentication?
   while (!hasAuthenticated(serverSock, username)) {
   }
   string welcomeMsg = "\nWelcome to RESC!\n\n";
@@ -414,10 +412,8 @@ bool hasAuthenticated (int hostSock, string &username) {
 
   // Locals
   string loginMsg = "////////////////////////////////////////////////////////\nPlease enter your username.\nThe system will create a new account if your username could not be found.\n";
-  string pwdMsg = "/\b\nPassword.\n";
   string clearScr = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
   string userName;
-  string userPwd;
   long responseLen = 0;
   string hostResponse;
 
@@ -430,13 +426,6 @@ bool hasAuthenticated (int hostSock, string &username) {
   displayMsg(loginMsg);
   wrefresh(INPUT_SCREEN);
   while (!getUserInput(userName, false)) {
-  }
-  clearInputScreen();
-
-  // Get Password
-  displayMsg(pwdMsg);
-  wrefresh(INPUT_SCREEN);
-  while (!getUserInput(userPwd, true)) {
   }
   clearInputScreen();
 

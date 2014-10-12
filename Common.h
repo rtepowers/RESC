@@ -35,6 +35,7 @@ namespace RESC {
 	struct User {
 		string Username;
 	};
+	
 // CORE DATA HELPERS
 	Msg ProcessMessage(string message) {
 	  // Turn
@@ -94,6 +95,7 @@ namespace RESC {
 	  } else {
 		tmp.To = "all";
 		tmp.Command = "/all";
+		tmp.Text = message;
 	  }
 	  
 	  return tmp;

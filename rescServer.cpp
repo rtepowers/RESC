@@ -77,7 +77,7 @@ string GetClientMessages(User user);
 // pre: none
 // post: none
 
-void BroadcastMessage(string message);
+void BroadcastMessage(string message, string username);
 // Function handles broadcasting messages.
 // pre: none
 // post: none
@@ -236,11 +236,16 @@ void ProcessClient(int clientSock) {
 	
 	while (clientMsg != "/quit") {
 		// Send Data
-		if (clientMsg != "") {
-			string response = "Server has listened!\n";
-			SendInteger(clientSock, response.length()+1);
-			SendMessage(clientSock, response);
-			clientMsg.clear();
+		string messages = GetClientMessages(clientUser);
+		if (messages != "") {
+			if (!SendInteger(clientSock, messages.length()+1)) {
+				cerr << "Unable to send Int. " << endl;
+				break;
+			}
+			if (!SendMessage(clientSock, messages)) {
+				cerr << "Unable to send messages" << endl;
+				break;
+			}
 		}
 		
 		// Read Data
@@ -249,7 +254,6 @@ void ProcessClient(int clientSock) {
 		tv.tv_usec = 100000;
 		FD_SET(clientSock, &clientfd);
 		if (pollSock != 0 && pollSock != -1) {
-		  string tmp;
 		  long msgLength = GetInteger(clientSock);
 		  if (msgLength <= 0) {
 			cerr << "Couldn't get integer from Client." << endl;
@@ -261,10 +265,7 @@ void ProcessClient(int clientSock) {
 			cerr << "Couldn't get message from Client." << endl;
 			break;
 		  }
-		  tmp = "Client Said: ";
-		  tmp.append(clientMsg);
-		  cout << tmp << endl;
-		  tmp.clear();
+		  BroadcastMessage(clientMsg, clientUser.Username);
 		  
 		}
 	}
@@ -342,6 +343,7 @@ void AddClientMessage(Msg newMessage) {
 	pthread_mutex_lock(&MsgQueueLock);
 	MsgQueue.push_back(newMessage);
 	pthread_mutex_unlock(&MsgQueueLock);
+	cout << "Added message: " << newMessage.Text << endl;
 }
 
 string GetClientMessages(User user) {
@@ -354,6 +356,10 @@ string GetClientMessages(User user) {
 				ss << MsgQueue[i].Text << endl;
 				MsgQueue.erase(MsgQueue.begin()+i);
 				i--;
+			} else {
+				ss << MsgQueue[i].Text << endl;
+				MsgQueue.erase(MsgQueue.begin()+i);
+				i--;
 			}
 		}
 	}
@@ -361,10 +367,17 @@ string GetClientMessages(User user) {
 	return ss.str();
 }
 
-void BroadcastMessage(string message) {
-
+void BroadcastMessage(string message, string userName) {
 	Msg tmp = ProcessMessage(message);
-	pthread_mutex_lock(&MsgQueueLock);
-	
-	pthread_mutex_lock(&MsgQueueLock);
+	tmp.From = userName;
+	pthread_mutex_lock(&UserListLock);
+	unordered_map<string, User>::iterator got = UserList.begin();
+    for ( ; got != UserList.end(); got++) {
+      if ((got)->second.Username != userName) {
+		// Send them a message.
+		tmp.To = (got)->second.Username;
+		AddClientMessage(tmp);
+      }
+    }
+	pthread_mutex_lock(&UserListLock);
 }
