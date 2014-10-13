@@ -289,7 +289,7 @@ string GetClientMessages(string serverName) {
 	pthread_mutex_lock(&MsgQueueLock);
 	for (int i = 0; i < MsgQueue.size(); i++) {
 		if (MsgQueue[i].To == serverName) {
-			ss << MsgQueue[i].Text << endl;
+			ss << MsgQueue[i].Text;
 			MsgQueue.erase(MsgQueue.begin()+i);
 			i--;
 			break;
