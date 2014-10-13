@@ -367,6 +367,9 @@ string GetClientMessages(User user, bool isServerMsg) {
 			if (MsgQueue[i].Command == "/all") {
 				// Message was intended for all users.
 				ss << MsgQueue[i].Text;
+				if (!isServerMsg) {
+					ss << endl;
+				}
 				MsgQueue.erase(MsgQueue.begin()+i);
 				i--;
 			} else {
