@@ -386,7 +386,9 @@ string GetClientMessages(User user, bool isServerMsg) {
 void BroadcastMessage(string message, string userName, bool isServerMsg) {
 	Msg tmp = ProcessMessage(message);
 	tmp.From = userName;
-	tmp.Text = userName + " said: " + tmp.Text;
+	if (!isServerMsg) {
+		tmp.Text = userName + " said: " + tmp.Text;
+	}
 	pthread_mutex_lock(&UserListLock);
 	unordered_map<string, User>::iterator got = UserList.begin();
     for ( ; got != UserList.end(); got++) {
