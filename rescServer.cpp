@@ -364,16 +364,12 @@ string GetClientMessages(User user, bool isServerMsg) {
 	pthread_mutex_lock(&MsgQueueLock);
 	for (int i = 0; i < MsgQueue.size(); i++) {
 		if (MsgQueue[i].To == user.Username) {
-			if (MsgQueue[i].Command == "/all") {
-				// Message was intended for all users.
-				ss << MsgQueue[i].Text << endl;
-				MsgQueue.erase(MsgQueue.begin()+i);
-				i--;
-			} else {
-				ss << MsgQueue[i].Text << endl;
-				MsgQueue.erase(MsgQueue.begin()+i);
-				i--;
+			ss << MsgQueue[i].Text;
+			if (!isServerMsg) {
+				ss << endl;
 			}
+			MsgQueue.erase(MsgQueue.begin()+i);
+			i--;
 			if (isServerMsg) {
 				break;
 			}
