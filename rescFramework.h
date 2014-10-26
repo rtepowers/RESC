@@ -10,6 +10,8 @@
 
 // Standard Library
 #include<iostream>
+#include<cstdio>
+#include<string>
 
 // Network Function
 #include<sys/types.h>
@@ -53,9 +55,25 @@ namespace RESC {
 		char password[32];
 	};
 
-	RESCMessage* ReadRequest(int incomingSocket)
+// Message Helper Functions
+RESCMessage CreateMessage(RESCCommand msgType, string to, string from, string message)
+{
+	RESCHeader header;
+	header.cmd = msgType;
+	strcpy(header.dest, to.c_str());
+	strcpy(header.source, from.c_str());
+	RESCMessage newRescMessage;
+	newRescMessage.hdr = header;
+	strcpy(newRescMessage.msg, message.c_str());
+	
+	return newRescMessage;
+}
+
+// Network Helper Functions
+	RESCMessage ReadRequest(int incomingSocket)
 	{
 		// Retrieve msg
+		RESCMessage tmp;
 		int RESCMessageSize = sizeof(RESCMessage);
 		int bytesLeft = RESCMessageSize;
 		char* buffer = new char[bytesLeft];
@@ -63,15 +81,17 @@ namespace RESC {
 		while (bytesLeft > 0){
 			int bytesRecvd = recv(incomingSocket, buffPTR, RESCMessageSize, 0);
 			if (bytesRecvd <= 0) {
-			  // Failed to Read for some reason.
-			  cerr << "Could not recv bytes. Closing socket: " << incomingSocket << "." << endl;
-			  return reinterpret_cast<RESCMessage*>(buffer);
+				// Failed to Read for some reason.
+				cerr << "Could not recv bytes. Closing socket: " << incomingSocket << "." << endl;
+				memcpy(&tmp, buffer, RESCMessageSize);
+				return tmp;
 			}
 			bytesLeft = bytesLeft - bytesRecvd;
 			buffPTR = buffPTR + bytesRecvd;
 		}
-
-		return reinterpret_cast<RESCMessage*>(buffer);
+		memcpy(&tmp, buffer, RESCMessageSize);
+		return tmp;
+		//return reinterpret_cast<RESCMessage*>(buffer);
 	}
 	
 	bool SendRequest(int outgoingSocket, RESCMessage msg)
