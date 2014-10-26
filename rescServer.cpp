@@ -89,13 +89,14 @@ int main(int argNum, char* argValues[]){
   string trackerHostName;
   // Need to grab Command-line arguments and convert them to useful types
   // Initialize arguments with proper variables.
-  if (argNum != 3){
+  if (argNum != 4){
     // Incorrect number of arguments
     cerr << "Incorrect number of arguments. Please try again." << endl;
     return -1;
   }
   trackerHostName = argValues[1];
-  serverPort = atoi(argValues[2]); 
+  serverPort = atoi(argValues[2]);
+  string serverSelfHostName = argValues[3];
 
   // Create socket connection
   int conn_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -130,9 +131,10 @@ int main(int argNum, char* argValues[]){
   SendMessage(trackerSock, identifier);
   char currentHostName_c[128];
   gethostname(currentHostName_c, sizeof currentHostName_c);
+  
   string currentHostName = currentHostName_c;
-  SendInteger(trackerSock, currentHostName.length()+1);
-  SendMessage(trackerSock, currentHostName);
+  SendInteger(trackerSock, serverSelfHostName.length()+1);
+  SendMessage(trackerSock, serverSelfHostName);
   struct threadArgs* args_t = new threadArgs;
   args_t -> clientSock = trackerSock;
   pthread_t trackID;
