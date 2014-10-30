@@ -32,6 +32,7 @@
 #include "rescFramework.h"
 
 using namespace std;
+using namespace RESC;
 
 int main (int argc, char * argv[])
 {
@@ -43,25 +44,16 @@ int main (int argc, char * argv[])
 		return -1;
 	}
 	// Need to store arguments
-	string hostname;
-	unsigned short serverPort;
-	hostname = argv[1];
-	serverPort = atoi(argv[2]);
+	string hostname = argv[1];
+	unsigned short serverPort = atoi(argv[2]);
 	
 	// Open ServerSocket
-	int serverSocket = RESC::OpenSocket(hostname, serverPort);
+	int serverSocket = OpenSocket(hostname, serverPort);
 	
-	RESC::RESCMessage request;
-	RESC::RESCHeader header;
-	header.cmd = RESC::RESCClientMessage;
-	header.dest[0] = '\0';
-	header.source[0] = '\0';
-	request.hdr = header;
-	for (int i =0 ; i < 255; i++) {
-		request.msg[i] = 's';
-	}
-	request.msg[255] = '\0';
-	RESC::SendRequest(serverSocket, request);
+	RESCMessage request = CreateMessage("","", "Hello!");
+	SendMessage(serverSocket, request);
+	
+	close(serverSocket);
 	
 	return 0;
 }
