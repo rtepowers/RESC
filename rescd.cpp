@@ -103,7 +103,7 @@ int main (int argc, char * argv[])
 	}
 	
 	// We are good to go! Alert admin running that we can now accept requests
-	cout << endl << "RESC Tracker: Ready to accept connections. " << endl;
+	cout << endl << "RESCD: Ready to accept connections. " << endl;
 	
 	
 	// Process Interrupts so we can gracefully exit()

@@ -12,18 +12,7 @@
 #include<string>
 #include<ctime>
 #include<cstdlib>
-#include<queue>
 #include<unordered_map>
-
-// Network Functions
-#include<sys/types.h>
-#include<sys/socket.h>
-#include<sys/select.h>
-#include<sys/time.h>
-#include<netinet/in.h>
-#include<arpa/inet.h>
-#include<unistd.h>
-#include<netdb.h>
 
 // Multithreading
 #include<pthread.h>
@@ -50,10 +39,15 @@ int main (int argc, char * argv[])
 	// Open ServerSocket
 	int serverSocket = OpenSocket(hostname, serverPort);
 	
-	RESCMessage request = CreateMessage("","", "Hello!");
-	SendMessage(serverSocket, request);
+	// Process
+	RESCAuthRequest request;
+	string uname = "raysTest";
+	string pword = "testing";
+	for (short i = 0; i < 9; i++) {
+		request.encryptedData[i] = (i > uname.length()) ? '\0' : uname[i];
+		request.encryptedData[i+9] = (i > pword.length()) ? '\0' : pword[i];
+	}
 	
-	close(serverSocket);
-	
+	CloseSocket(serverSocket);
 	return 0;
 }

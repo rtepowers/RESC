@@ -39,12 +39,9 @@ struct threadArgs {
 // Globals
 int MAXPENDING = 20;
 int conn_socket;
-deque<RESC::RESCServer*> serverList;
-unordered_map<string, RESC::RESCServer*> serverDetails;
-pthread_mutex_t ServerListLock;
-pthread_mutex_t ServerDetailsLock;
-int ServerListStatus = pthread_mutex_init(&ServerListLock, NULL);
-int ServerDetailsStatus = pthread_mutex_init(&ServerDetailsLock, NULL);
+unordered_map<string, string> userRepository;
+pthread_mutex_t UserRepositoryLock;
+int UserRepositoryStatus = pthread_mutex_init(&UserRepositoryLock, NULL);
 
 // Function Prototypes
 void* requestThread(void* args_p);
@@ -59,6 +56,12 @@ void ProcessRequest(int requestSock);
 
 void ProcessSignal(int sig);
 // Function interprets signal interrupts so we can handle safe closure of threads.
+// pre: none
+// post: none
+
+bool ValidateUser(RES::RESCAuthRequest request);
+// Function handles the Authentication portion of our system. Will need to update at
+// some point
 // pre: none
 // post: none
 
@@ -102,16 +105,15 @@ int main (int argc, char * argv[])
 		exit(-1);
 	}
 	
-	// We are good to go! Alert admin running that we can now accept requests
-	cout << endl << "RESC Tracker: Ready to accept connections. " << endl;
-	
-	
 	// Process Interrupts so we can gracefully exit()
 	struct sigaction sigIntHandler;
 	sigIntHandler.sa_handler = ProcessSignal;
 	sigemptyset(&sigIntHandler.sa_mask);
 	sigIntHandler.sa_flags = 0;
 	sigaction(SIGINT, &sigIntHandler, NULL);
+	
+	// We are good to go! Alert admin running that we can now accept requests
+	cout << endl << "RESC Tracker: Ready to accept connections. " << endl;
 	
 	// Accept connections
 	while (true) {
@@ -135,7 +137,6 @@ int main (int argc, char * argv[])
 			close(requestSock);
 			pthread_exit(NULL);
 		}
-
 	}
 
 	return 0;
@@ -165,11 +166,46 @@ void* requestThread(void* args_p) {
 void ProcessRequest(int requestSock) {
 
 	// Parse messages
-	RESC::RESCUser
+	RESC::RESCAuthRequest request = RESC::ReadAuthRequest(requestSock);
+	if (ValidateUser(request)) {
+		// Successfully validate.
+		RESC::RESCAuthResult result;
+		result.status = SUCCESSFUL_AUTH;
+		RESC::SendAuthResult(requestSock, result);
+	} else {
+		RESC::RESCAuthResult result;
+		result.status = INVALID_AUTH;
+		RESC::SendAuthResult(requestSock, result);
+	}
 }
 
 void ProcessSignal(int sig) {
 	close(conn_socket);
 	cout << endl << endl << "Shutting down server." << endl;
 	exit(1);
+}
+
+bool ValidateUser(RESC::RESCAuthRequest request)
+{
+	bool isValidated = false;
+	char uname[9];
+	string pword[9];
+	for (short i = 0; i < 9; i++) {
+		uname[i] = request.encryptedData[i];
+		pword[i] = request.encruptedData[i+9];
+	}
+	pthread_mutex_lock(&UserRepositoryLock);
+	unordered_map<string, string>::const_iterator userIter = userRepository.find(uname);
+	if (userIter == userRepository.end() {
+		// We do not have this user.
+		userRepository.insert(make_pair<string, string>(uname, pword));
+		isValidated = true;
+	} else {
+		if ((*userIter).second == pword) {
+			// Passwords match
+			isValidated = true;
+		}
+	}
+	ptherad_mutex_unlock(&UserRepositoryLock);
+	return isValidated;
 }

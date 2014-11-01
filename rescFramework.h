@@ -102,7 +102,88 @@ RESCMessage CreateMessage(string to, string from, string message)
 }
 
 // Network Helper Functions
-	RESCAuthResult Check
+	bool SendAuthRequest(int outgoingSocket, RESCAuthRequest request)
+	{
+		int reqLenth = sizeof(RESCAuthRequest);
+		char reqBuff[reqLength];
+		for (short i = 0; i < reqLength; i++) {
+			reqBuff[i] = ((char*)&request)[i];
+		}
+		int didSend = send(outgoingSocket, reqBuff, reqLength, 0);
+		if (didSend != reqLength) {
+			cerr << "Unable to Authorize user. Socket: " << outgoingSocket << endl;
+			return false;
+		}
+		
+		return true;
+	}
+	RESCAuthRequest ReadAuthRequest(int incomingSocket)
+	{
+		RESCAuthRequest response;
+		int resLength = sizeof(RESCAuthRequest);
+		int bytesLeft = resLength;
+		char* buffer = new char[resLength];
+		char* buffPtr = buffer;
+		while (bytesLeft > 0) {
+			int bytesRecvd = recv(incomingSocket, buffPtr, resLength, 0);
+			if (bytesRecvd <= 0) {	
+				cerr << "Unable to receive Authorization Response. Socket: "<< authSocket << endl;
+				return response;
+			}
+		}
+		
+		memcpy(&response, buffer, resLength);
+		delete [] buffer;
+		return response;
+	}
+	
+	RESCAuthResult ReadAuthResult(int incomingSocket)
+	{
+		RESCAuthResult response;
+		int resLength = sizeof(RESCAuthResult);
+		int bytesLeft = resLength;
+		char* buffer = new char[resLength];
+		char* buffPtr = buffer;
+		while (bytesLeft > 0) {
+			int bytesRecvd = recv(incomingSocket, buffPtr, resLength, 0);
+			if (bytesRecvd <= 0) {	
+				cerr << "Unable to receive Authorization Response. Socket: "<< authSocket << endl;
+				return response;
+			}
+		}
+		
+		memcpy(&response, buffer, resLength);
+		delete [] buffer;
+		return response;
+	}
+	
+	bool SendAuthResult(int outgoingSocket, RESCAuthResult result)
+	{
+		int reqLenth = sizeof(RESCAuthResult);
+		char reqBuff[reqLength];
+		for (short i = 0; i < reqLength; i++) {
+			reqBuff[i] = ((char*)&result)[i];
+		}
+		int didSend = send(outgoingSocket, reqBuff, reqLength, 0);
+		if (didSend != reqLength) {
+			cerr << "Unable to Authorize user. Socket: " << outgoingSocket << endl;
+			return false;
+		}
+		
+		return true;
+	}
+	
+	RESCAuthResult Authorize(int authSocket, RESCAuthRequest request)
+	{
+		RESCAuthResult result;
+		if (SendAuthRequest(authSocket, request)) {
+			return ReadAuthResult(authSocket);
+		}
+		result.status = INVALID_AUTH;
+		return result;
+		
+	}
+	
 	RESCJobData ReadJobData(int incomingSocket)
 	{
 		// Retrieve msg
@@ -123,8 +204,8 @@ RESCMessage CreateMessage(string to, string from, string message)
 			buffPTR = buffPTR + bytesRecvd;
 		}
 		memcpy(&tmp, buffer, RESCMessageSize);
+		delete [] buffer;
 		return tmp;
-		//return reinterpret_cast<RESCMessage*>(buffer);
 	}
 	
 	bool SendJobData(int outgoingSocket, RESCJobData msg)
@@ -167,6 +248,7 @@ RESCMessage CreateMessage(string to, string from, string message)
 			buffPTR = buffPTR + bytesRecvd;
 		}
 		memcpy(&tmp, buffer, RESCMessageSize);
+		delete [] buffer;
 		return tmp;
 		//return reinterpret_cast<RESCMessage*>(buffer);
 	}
@@ -212,6 +294,7 @@ RESCMessage CreateMessage(string to, string from, string message)
 			buffPTR = buffPTR + bytesRecvd;
 		}
 		memcpy(&tmp, buffer, RESCMessageSize);
+		delete [] buffer;
 		return tmp;
 		//return reinterpret_cast<RESCMessage*>(buffer);
 	}
@@ -274,6 +357,11 @@ RESCMessage CreateMessage(string to, string from, string message)
 	  }
 
 	  return hostSock;
+	}
+	
+	void CloseSocket(int sock)
+	{
+		close(sock);
 	}
 }
 #endif // _RESCFRAMEWORK_H_
