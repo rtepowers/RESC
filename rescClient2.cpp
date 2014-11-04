@@ -43,10 +43,20 @@ int main (int argc, char * argv[])
 	RESCAuthRequest request;
 	string uname = "raysTest";
 	string pword = "testing";
+	cout << "Building Request" << endl;
 	for (short i = 0; i < 9; i++) {
 		request.encryptedData[i] = (i > uname.length()) ? '\0' : uname[i];
 		request.encryptedData[i+9] = (i > pword.length()) ? '\0' : pword[i];
+		cout << i;
 	}
+	
+	cout << "\nMaking Call" << endl;
+	RESCAuthResult result = Authorize(serverSocket, request);
+	
+	cout << "Result was: " << result.status << endl;
+	string status = (result.status == SUCCESSFUL_AUTH) ? "Good" : "Bad";
+	cout << "The user was " << status << endl;
+	
 	
 	CloseSocket(serverSocket);
 	return 0;

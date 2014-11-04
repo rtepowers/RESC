@@ -104,7 +104,7 @@ RESCMessage CreateMessage(string to, string from, string message)
 // Network Helper Functions
 	bool SendAuthRequest(int outgoingSocket, RESCAuthRequest request)
 	{
-		int reqLenth = sizeof(RESCAuthRequest);
+		int reqLength = sizeof(RESCAuthRequest);
 		char reqBuff[reqLength];
 		for (short i = 0; i < reqLength; i++) {
 			reqBuff[i] = ((char*)&request)[i];
@@ -127,9 +127,11 @@ RESCMessage CreateMessage(string to, string from, string message)
 		while (bytesLeft > 0) {
 			int bytesRecvd = recv(incomingSocket, buffPtr, resLength, 0);
 			if (bytesRecvd <= 0) {	
-				cerr << "Unable to receive Authorization Response. Socket: "<< authSocket << endl;
+				cerr << "Unable to receive Authorization Response. Socket: "<< incomingSocket << endl;
 				return response;
 			}
+			bytesLeft = bytesLeft - bytesRecvd;
+			buffPtr = buffPtr + bytesRecvd;
 		}
 		
 		memcpy(&response, buffer, resLength);
@@ -147,9 +149,11 @@ RESCMessage CreateMessage(string to, string from, string message)
 		while (bytesLeft > 0) {
 			int bytesRecvd = recv(incomingSocket, buffPtr, resLength, 0);
 			if (bytesRecvd <= 0) {	
-				cerr << "Unable to receive Authorization Response. Socket: "<< authSocket << endl;
+				cerr << "Unable to receive Authorization Response. Socket: "<< incomingSocket << endl;
 				return response;
 			}
+			bytesLeft = bytesLeft - bytesRecvd;
+			buffPtr = buffPtr + bytesRecvd;
 		}
 		
 		memcpy(&response, buffer, resLength);
@@ -159,7 +163,7 @@ RESCMessage CreateMessage(string to, string from, string message)
 	
 	bool SendAuthResult(int outgoingSocket, RESCAuthResult result)
 	{
-		int reqLenth = sizeof(RESCAuthResult);
+		int reqLength = sizeof(RESCAuthResult);
 		char reqBuff[reqLength];
 		for (short i = 0; i < reqLength; i++) {
 			reqBuff[i] = ((char*)&result)[i];

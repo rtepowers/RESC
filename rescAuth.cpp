@@ -59,7 +59,7 @@ void ProcessSignal(int sig);
 // pre: none
 // post: none
 
-bool ValidateUser(RES::RESCAuthRequest request);
+bool ValidateUser(RESC::RESCAuthRequest request);
 // Function handles the Authentication portion of our system. Will need to update at
 // some point
 // pre: none
@@ -164,17 +164,17 @@ void* requestThread(void* args_p) {
 }
 
 void ProcessRequest(int requestSock) {
-
+	cout << "Processing request on socket: " << requestSock << endl;
 	// Parse messages
 	RESC::RESCAuthRequest request = RESC::ReadAuthRequest(requestSock);
 	if (ValidateUser(request)) {
 		// Successfully validate.
 		RESC::RESCAuthResult result;
-		result.status = SUCCESSFUL_AUTH;
+		result.status = RESC::SUCCESSFUL_AUTH;
 		RESC::SendAuthResult(requestSock, result);
 	} else {
 		RESC::RESCAuthResult result;
-		result.status = INVALID_AUTH;
+		result.status = RESC::INVALID_AUTH;
 		RESC::SendAuthResult(requestSock, result);
 	}
 }
@@ -188,24 +188,36 @@ void ProcessSignal(int sig) {
 bool ValidateUser(RESC::RESCAuthRequest request)
 {
 	bool isValidated = false;
-	char uname[9];
-	string pword[9];
+	stringstream ss;
+	string uname;
+	string pword;
+	
+	// NOTE: Would probably do some REAL decryption here
 	for (short i = 0; i < 9; i++) {
-		uname[i] = request.encryptedData[i];
-		pword[i] = request.encruptedData[i+9];
+		ss << request.encryptedData[i];
 	}
+	uname = ss.str();
+	ss.str("");
+	ss.clear();
+	for (short i = 0; i < 9; i++) {
+		ss << request.encryptedData[i+9];
+	}
+	pword = ss.str();
+	ss.str("");
+	ss.clear();
+
 	pthread_mutex_lock(&UserRepositoryLock);
 	unordered_map<string, string>::const_iterator userIter = userRepository.find(uname);
-	if (userIter == userRepository.end() {
+	if (userIter == userRepository.end()) {
 		// We do not have this user.
 		userRepository.insert(make_pair<string, string>(uname, pword));
 		isValidated = true;
 	} else {
-		if ((*userIter).second == pword) {
+		if (!pword.compare((*userIter).second)) {
 			// Passwords match
 			isValidated = true;
 		}
 	}
-	ptherad_mutex_unlock(&UserRepositoryLock);
+	pthread_mutex_unlock(&UserRepositoryLock);
 	return isValidated;
 }
