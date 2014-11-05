@@ -165,9 +165,12 @@ void* requestThread(void* args_p) {
 void ProcessRequest(int requestSock) {
 
 	// Parse messages
-	RESC::RESCMessage request = RESC::ReadRequest(requestSock);
-	
-	cout << "Message was : " << request.msg << endl;
+	string message;
+	do {
+		RESC::RESCMessage request = RESC::ReadMessage(requestSock);
+		message = string(request.job.source) + " said: " + string(request.data.data);
+		cout << "Message was : " << message << endl;
+	} while (message != "/quit" || message != "/exit" || message != "/close");
 }
 
 void ProcessSignal(int sig) {

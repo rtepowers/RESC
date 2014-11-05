@@ -138,6 +138,7 @@ int main (int argc, char * argv[])
 				// Process Local Commands
 				if (inputStr == "/quit" || inputStr == "/exit" || inputStr == "/close") {
 					// Notify Server we're done.
+					SendMessage(serverSocket, CreateMessage("", user.username, inputStr));
 					break;
 				}
 			
@@ -401,7 +402,7 @@ void ProcessIncomingData(int serverSocket) {
       // Drop messages that are garbage.
       if (incMessage.job.jobType != INVALID_MSG) {
         // Should run through a message processor.
-        string msg = string(incMessage.data.data);
+        string msg = string(incMessage.job.source) + " said: " + string(incMessage.data.data);
 		  DisplayMessage(msg);
 		  wrefresh(INPUT_SCREEN);
       }
