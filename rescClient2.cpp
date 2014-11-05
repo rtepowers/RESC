@@ -126,19 +126,20 @@ int main (int argc, char * argv[])
 	args_p -> serverSocket = serverSocket;
 	pthread_t tid;
 	int threadStatus = pthread_create(&tid, NULL, ServerThread, (void*)args_p);
-	if (!threadStatus) {
+	if (threadStatus) {
 		cerr << "Failed to create child process." << endl;
 		CloseSocket(serverSocket);
 		serverSocket = 0;
 	}
-	if (serverSocket) {
+	if (serverSocket > 0) {
 		// Enter Function Loop
 		while (true) {
 			if (GetUserInput(inputStr, false)) {
 				// Process Local Commands
 				if (inputStr == "/quit" || inputStr == "/exit" || inputStr == "/close") {
 					// Notify Server we're done.
-					SendMessage(serverSocket, CreateMessage("", user.username, inputStr));
+					RESCMessage rescMsg = CreateMessage("", user.username, inputStr);
+					SendMessage(serverSocket, rescMsg);
 					break;
 				}
 			
@@ -149,7 +150,12 @@ int main (int argc, char * argv[])
 				DisplayMessage(tmp);
 			
 				// Send to Chat Server
-				SendMessage(serverSocket, CreateMessage("", user.username, inputStr));
+				RESCMessage rescMsg = CreateMessage("", user.username, inputStr);
+				SendMessage(serverSocket, rescMsg);
+				
+				// Clean slate
+				inputStr.clear();
+				ClearInputScreen();
 			}
 		}
 	}
@@ -160,6 +166,9 @@ int main (int argc, char * argv[])
 	delwin(USER_SCREEN);
 	delwin(MSG_SCREEN);
     endwin();
+    
+    cout << "threadStatus was " << threadStatus << endl;
+	cout << "serverSocket was " << serverSocket << endl;
 	exit(0);
 }
 

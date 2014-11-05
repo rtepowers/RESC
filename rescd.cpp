@@ -164,13 +164,34 @@ void* requestThread(void* args_p) {
 
 void ProcessRequest(int requestSock) {
 
-	// Parse messages
+	// GetMessages
 	string message;
-	do {
-		RESC::RESCMessage request = RESC::ReadMessage(requestSock);
-		message = string(request.job.source) + " said: " + string(request.data.data);
-		cout << "Message was : " << message << endl;
-	} while (message != "/quit" || message != "/exit" || message != "/close");
+	fd_set trackerfd;
+	struct timeval tv;
+	int sockIndex = 0;
+	
+	// Clear FD_Set and set timeout.
+	FD_ZERO(&trackerfd);
+	tv.tv_sec = 2;
+	tv.tv_usec = 100000;
+
+	// Initialize Data
+	FD_SET(requestSock, &trackerfd);
+	sockIndex = requestSock + 1;
+	
+	while (true) {
+		// Read Data
+		int pollSock = select(sockIndex, &trackerfd, NULL, NULL, &tv);
+		tv.tv_sec = 1;
+		tv.tv_usec = 100000;
+		FD_SET(requestSock, &trackerfd);
+		if (pollSock != 0 && pollSock != -1) {
+			RESC::RESCMessage request = RESC::ReadMessage(requestSock);
+			message = string(request.job.source) + " said: " + string(request.data.data);
+			cout << "Message was : " << message << endl;
+			if (message != "/quit" || message != "/exit" || message != "/close") break;
+		}
+	}
 }
 
 void ProcessSignal(int sig) {

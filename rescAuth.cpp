@@ -164,7 +164,6 @@ void* requestThread(void* args_p) {
 }
 
 void ProcessRequest(int requestSock) {
-	cout << "Processing request on socket: " << requestSock << endl;
 	// Parse messages
 	RESC::RESCAuthRequest request = RESC::ReadAuthRequest(requestSock);
 	if (ValidateUser(request)) {
