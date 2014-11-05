@@ -80,7 +80,7 @@ namespace RESC {
 RESCMessage CreateMessage(string to, string from, string message)
 {
 	RESCMessage rescJob;
-	if (from.length() || message.length() > 256) {
+	if (!from.length() || message.length() > 256) {
 		rescJob.job.jobType = INVALID_MSG;
 		return rescJob;
 	}

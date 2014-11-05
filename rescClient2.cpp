@@ -95,6 +95,7 @@ int main (int argc, char * argv[])
 {
 	// LOCALS
 	string inputStr;
+	string userName;
 	RESCUser user;
 	
 	// Need to grab Command-line arguments and convert them to useful types
@@ -115,6 +116,7 @@ int main (int argc, char * argv[])
 	int authSocket = OpenSocket(hostname, serverPort+1);
 	while (!HasAuthenticated(authSocket, user)) {
 	}
+	userName = string(user.username);
 	CloseSocket(authSocket);
 	
 	// Connect to a Chat Server (BOOTSTRAPPED?)
@@ -136,7 +138,7 @@ int main (int argc, char * argv[])
 				// Process Local Commands
 				if (inputStr == "/quit" || inputStr == "/exit" || inputStr == "/close") {
 					// Notify Server we're done.
-					RESCMessage rescMsg = CreateMessage("", user.username, inputStr);
+					RESCMessage rescMsg = CreateMessage("", userName, inputStr);
 					SendMessage(serverSocket, rescMsg);
 					break;
 				}
@@ -148,11 +150,8 @@ int main (int argc, char * argv[])
 				DisplayMessage(tmp);
 			
 				// Send to Chat Server
-				RESCMessage rescMsg = CreateMessage("", user.username, inputStr);
-				if (SendMessage(serverSocket, rescMsg)) {
-					string errMsg = "SHIT BALLS";
-					DisplayMessage(errMsg);
-				}
+				RESCMessage rescMsg = CreateMessage("", userName, inputStr);
+				SendMessage(serverSocket, rescMsg);
 				
 				// Clean slate
 				inputStr.clear();
@@ -273,7 +272,7 @@ bool HasAuthenticated (int serverSocket, RESCUser &user) {
   // Evaluate Host Response
   if (result.status == SUCCESSFUL_AUTH) {
     // Login Sucessful!
-    user.username = username.c_str();
+    strcpy(user.username,userName.c_str());
     return true;
   }
   // Login Failed
@@ -416,8 +415,8 @@ void ProcessIncomingData(int serverSocket) {
       if (incMessage.job.jobType != INVALID_MSG) {
         // Should run through a message processor.
         string msg = string(incMessage.job.source) + " said: " + string(incMessage.data.data);
-		  DisplayMessage(msg);
-		  wrefresh(INPUT_SCREEN);
+		DisplayMessage(msg);
+	    wrefresh(INPUT_SCREEN);
       }
     }
   }

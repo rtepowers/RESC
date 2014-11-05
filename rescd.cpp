@@ -189,7 +189,9 @@ void ProcessRequest(int requestSock) {
 			RESC::RESCMessage request = RESC::ReadMessage(requestSock);
 			message = string(request.job.source) + " said: " + string(request.data.data);
 			cout << "Message was : " << message << endl;
-			if (message != "/quit" || message != "/exit" || message != "/close") break;
+			message.clear();
+			message = string(request.data.data);
+			if (message == "/quit" || message == "/exit" || message == "/close") break;
 		}
 	}
 }
