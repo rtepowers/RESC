@@ -13,6 +13,7 @@
 #include<ctime>
 #include<cstdlib>
 #include<unordered_map>
+#include<queue>
 
 // User Interface
 #include<curses.h>
@@ -26,19 +27,23 @@
 using namespace std;
 using namespace RESC;
 
-// Global Constants
+// Globals
 const int INPUT_LINES = 3;
-const int USER_COLS = 9;
+const int USER_COLS = 10;
 const char ENTER_SYM = '\n';
 const char BACKSPACE_SYM = '\b';
 const int DELETE_SYM = 127; // NOTE: Now symbol for this.
 WINDOW* INPUT_SCREEN;
 WINDOW* MSG_SCREEN;
 WINDOW* USER_SCREEN;
-fd_set HOSTFD;
-struct timeval TV;
 pthread_mutex_t displayLock;
 int displayStatus = pthread_mutex_init(&displayLock, NULL);
+unordered_map<string, RESCUser> USERMAP;
+pthread_mutex_t userMapLock;
+int userMapStatus = pthread_mutex_init(&userMapLock, NULL);
+deque<string> USERLIST;
+pthread_mutex_t userListLock;
+int userListStatus = pthread_mutex_init(&userListLock, NULL);
 
 // Data Structures
 struct threadArgs {
@@ -69,6 +74,11 @@ void* ServerThread(void* args_p);
 void DisplayMessage(string &msg);
 // Function displays message on screen
 // pre: MSG_SCREEN should exist
+// post: none
+
+void DisplayUserList();
+// Function displays the list of Users
+// pre: USER_SCREEN should exist
 // post: none
 
 void ProcessIncomingData(int serverSocket);
@@ -102,10 +112,12 @@ int main (int argc, char * argv[])
 	PrepareWindows();
 	
 	// Connect To Chat Server
-	int serverSocket = OpenSocket(hostname, serverPort);
+	int serverSocket = OpenSocket(hostname, serverPort+1);
 	
 	while (!HasAuthenticated(serverSocket, user)) {
 	}
+	CloseSocket(serverSocket);
+	serverSocket = OpenSocket(hostname, serverPort);
 	
 	CloseSocket(serverSocket);
 	delwin(INPUT_SCREEN);
@@ -144,7 +156,9 @@ void PrepareWindows() {
   ClearInputScreen();
   
   USER_SCREEN = newwin(LINES - INPUT_LINES, USER_COLS, 0, COLS - USER_COLS);
+  werase(USER_SCREEN);
   mvwvline(USER_SCREEN, 0, 0, '|', LINES - INPUT_LINES);
+  wrefresh(USER_SCREEN);
   
 }
 
@@ -155,7 +169,7 @@ void ClearInputScreen() {
 	
 	// Move Cursor to start of next line
 	wmove(INPUT_SCREEN, 1, 0);
-	waddstr(INPUT_SCREEN, "Input: ");
+	waddstr(INPUT_SCREEN, "Input:  ");
 	
 	wrefresh(INPUT_SCREEN);
 }
@@ -163,7 +177,13 @@ void ClearInputScreen() {
 bool HasAuthenticated (int serverSocket, RESCUser &user) {
 
   // Locals
-  string loginMsg = "//////\nWelcome to RESC!\n\nPlease login.\n\n";
+  stringstream ss;
+  for (short i =0; i < COLS - USER_COLS; i++) {
+  	ss << "/";
+  }
+  string loginMsg = ss.str() + "\nWelcome to RESC!\n\nPlease login.\n\n";
+  ss.str("");
+  ss.clear();
   string clearScr = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
   string pwdMsg = "/\b\nPlease enter your password.\n";
   string userName;
@@ -263,21 +283,76 @@ bool GetUserInput(string &inputStr, bool shouldProtect) {
 void DisplayMessage(string &msg) {
   pthread_mutex_lock(&displayLock);
   // Add Msg to screen.
-  if (msg.c_str()[0] == '/') {
-    string blank = "\n";
-    waddstr(MSG_SCREEN, blank.c_str());
-    init_pair(2, COLOR_MAGENTA, COLOR_BLACK);
-    wbkgd(MSG_SCREEN, COLOR_PAIR(2));
-    
-  } else {
-    // SET Colors for window.
-    init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
-    wbkgd(MSG_SCREEN, COLOR_PAIR(1));
-  }
+  // SET Colors for window.
+  init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
+  wbkgd(MSG_SCREEN, COLOR_PAIR(1));
   waddstr(MSG_SCREEN, msg.c_str());
   
   // Show new screen.
   wrefresh(MSG_SCREEN);
   pthread_mutex_unlock(&displayLock);
 
+}
+
+void DisplayUserList() {
+	stringstream ss;
+	pthread_mutex_lock(&userListLock);
+	int numOfUsers = USERLIST.length();
+	bool needsSummary = false;
+	if (numOfUsers > (LINES - INPUT_LINES)) {
+		numOfUsers = (LINES - INPUT_LINES) - 2;
+		needsSummary = true;
+	}
+	for (short i = 0; i < numOfUsers; i++) {
+		ss << USERLIST[i] << endl;
+	}
+	if (needsSummary) {
+		ss << "---" << endl << USERLIST.length() << " USERS";
+	}
+	
+	string tmp = ss.str();
+	waddstr(USER_SCREEN, tmp.c_str());
+	
+	// Show screen
+	wrefresh(USER_SCREEN);
+	pthread_mutex_unlock(&userListLock);
+}
+
+void ProcessIncomingData(int serverSocket) {
+
+  // Locals
+  bool canRead = true;
+  fd_set hostfd;
+  struct timeval tv;
+
+  // Clear FD_Set and set timeout.
+  FD_ZERO(&hostfd);
+  tv.tv_sec = 1;
+  tv.tv_usec = 10000;
+
+  // Initialize Data
+  FD_SET(serverSocket, &hostfd);
+  int numberOfSocks = serverSocket + 1;
+
+  while (canRead) {
+    // Read Data
+    int pollSock = select(numberOfSocks, &hostfd, NULL, NULL, &tv);
+    tv.tv_sec = 1;
+    tv.tv_usec = 10000;
+    FD_SET(serverSocket, &hostfd);
+    if (pollSock != 0 && pollSock != -1) {
+      long msgLength = GetInteger(serverSocket);
+      if (msgLength <= 0) {
+		cerr << "Couldn't get integer from Server." << endl;
+		break;
+      }
+      string clientMsg = GetMessage(serverSocket, msgLength);
+      if (clientMsg == "") {
+		cerr << "Couldn't get message from Server." << endl;
+		break;
+      }
+      displayMsg(clientMsg);
+      wrefresh(INPUT_SCREEN);
+    }
+  }
 }

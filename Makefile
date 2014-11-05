@@ -1,12 +1,10 @@
 all: rescSystem
 rescSystem: 
-	g++ rescClient.cpp -o rescClient -lcurses -lpthread
-	g++ rescServer.cpp -o rescServer -lpthread
-	g++ rescTracker.cpp -o rescTracker -lpthread
+	g++ rescClient2.cpp -o rescClient2 -lcurses -lpthread
+	g++ rescAuth.cpp -o rescAuth -lpthread
 
 clean:
-	rm -rf rescClient
-	rm -rf rescServer
-	rm -rf rescTracker
+	rm -rf rescClient2
+	rm -rf rescAuth
 	
 
