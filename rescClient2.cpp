@@ -341,18 +341,14 @@ void ProcessIncomingData(int serverSocket) {
     tv.tv_usec = 10000;
     FD_SET(serverSocket, &hostfd);
     if (pollSock != 0 && pollSock != -1) {
-      long msgLength = GetInteger(serverSocket);
-      if (msgLength <= 0) {
-		cerr << "Couldn't get integer from Server." << endl;
-		break;
+      // Socket has data, let's retrieve it.
+      RESCMessage incMessage = ReadMessage(serverSocket);
+      // Drop messages that are garbage.
+      if (incMessage.jobType != INVALID_MSG) {
+        // Should run through a message processor.
+		  displayMsg(clientMsg);
+		  wrefresh(INPUT_SCREEN);
       }
-      string clientMsg = GetMessage(serverSocket, msgLength);
-      if (clientMsg == "") {
-		cerr << "Couldn't get message from Server." << endl;
-		break;
-      }
-      displayMsg(clientMsg);
-      wrefresh(INPUT_SCREEN);
     }
   }
 }

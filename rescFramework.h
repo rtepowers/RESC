@@ -254,7 +254,6 @@ RESCMessage CreateMessage(string to, string from, string message)
 		memcpy(&tmp, buffer, RESCMessageSize);
 		delete [] buffer;
 		return tmp;
-		//return reinterpret_cast<RESCMessage*>(buffer);
 	}
 	
 	bool SendJob(int outgoingSocket, RESCJob msg)
@@ -300,7 +299,6 @@ RESCMessage CreateMessage(string to, string from, string message)
 		memcpy(&tmp, buffer, RESCMessageSize);
 		delete [] buffer;
 		return tmp;
-		//return reinterpret_cast<RESCMessage*>(buffer);
 	}
 	
 	bool SendMessage(int outgoingSocket, RESCMessage msg)
