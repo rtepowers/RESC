@@ -112,23 +112,21 @@ int main (int argc, char * argv[])
 	PrepareWindows();
 	
 	// Connect To Chat Server Authentication (BOOTSTRAPPED?)
-	int serverSocket = OpenSocket(hostname, serverPort+1);
-	
-	while (!HasAuthenticated(serverSocket, user)) {
+	int authSocket = OpenSocket(hostname, serverPort+1);
+	while (!HasAuthenticated(authSocket, user)) {
 	}
-	CloseSocket(serverSocket);
+	CloseSocket(authSocket);
 	
 	// Connect to a Chat Server (BOOTSTRAPPED?)
-	serverSocket = OpenSocket(hostname, serverPort);
+	int serverSocket = OpenSocket(hostname, serverPort);
 	
 	// Establish Socket Reader
 	struct threadArgs* args_p = new threadArgs;
 	args_p -> serverSocket = serverSocket;
 	pthread_t tid;
 	int threadStatus = pthread_create(&tid, NULL, ServerThread, (void*)args_p);
-	if (threadStatus) {
+	if (threadStatus != 0) {
 		cerr << "Failed to create child process." << endl;
-		CloseSocket(serverSocket);
 		serverSocket = 0;
 	}
 	if (serverSocket > 0) {
@@ -151,7 +149,10 @@ int main (int argc, char * argv[])
 			
 				// Send to Chat Server
 				RESCMessage rescMsg = CreateMessage("", user.username, inputStr);
-				SendMessage(serverSocket, rescMsg);
+				if (SendMessage(serverSocket, rescMsg)) {
+					string errMsg = "SHIT BALLS";
+					DisplayMessage(errMsg);
+				}
 				
 				// Clean slate
 				inputStr.clear();
@@ -167,6 +168,8 @@ int main (int argc, char * argv[])
 	delwin(MSG_SCREEN);
     endwin();
     
+    string name = string(user.username);
+    cout << "User was " << name << endl;
     cout << "threadStatus was " << threadStatus << endl;
 	cout << "serverSocket was " << serverSocket << endl;
 	exit(0);
@@ -270,6 +273,7 @@ bool HasAuthenticated (int serverSocket, RESCUser &user) {
   // Evaluate Host Response
   if (result.status == SUCCESSFUL_AUTH) {
     // Login Sucessful!
+    user.username = username.c_str();
     return true;
   }
   // Login Failed

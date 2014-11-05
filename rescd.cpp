@@ -166,25 +166,25 @@ void ProcessRequest(int requestSock) {
 
 	// GetMessages
 	string message;
-	fd_set trackerfd;
+	fd_set requestfd;
 	struct timeval tv;
 	int sockIndex = 0;
 	
 	// Clear FD_Set and set timeout.
-	FD_ZERO(&trackerfd);
+	FD_ZERO(&requestfd);
 	tv.tv_sec = 2;
 	tv.tv_usec = 100000;
 
 	// Initialize Data
-	FD_SET(requestSock, &trackerfd);
+	FD_SET(requestSock, &requestfd);
 	sockIndex = requestSock + 1;
 	
 	while (true) {
 		// Read Data
-		int pollSock = select(sockIndex, &trackerfd, NULL, NULL, &tv);
+		int pollSock = select(sockIndex, &requestfd, NULL, NULL, &tv);
 		tv.tv_sec = 1;
 		tv.tv_usec = 100000;
-		FD_SET(requestSock, &trackerfd);
+		FD_SET(requestSock, &requestfd);
 		if (pollSock != 0 && pollSock != -1) {
 			RESC::RESCMessage request = RESC::ReadMessage(requestSock);
 			message = string(request.job.source) + " said: " + string(request.data.data);
