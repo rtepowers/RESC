@@ -111,14 +111,49 @@ int main (int argc, char * argv[])
 	// Begin User Interface
 	PrepareWindows();
 	
-	// Connect To Chat Server
+	// Connect To Chat Server Authentication (BOOTSTRAPPED?)
 	int serverSocket = OpenSocket(hostname, serverPort+1);
 	
 	while (!HasAuthenticated(serverSocket, user)) {
 	}
 	CloseSocket(serverSocket);
+	
+	// Connect to a Chat Server (BOOTSTRAPPED?)
 	serverSocket = OpenSocket(hostname, serverPort);
 	
+	// Establish Socket Reader
+	struct threadArgs* args_p = new threadArgs;
+	args_p -> serverSocket = serverSocket;
+	pthread_t tid;
+	int threadStatus = pthread_create(&tid, NULL, ServerThread, (void*)args_p);
+	if (!threadStatus) {
+		cerr << "Failed to create child process." << endl;
+		CloseSocket(serverSocket);
+		serverSocket = 0;
+	}
+	if (serverSocket) {
+		// Enter Function Loop
+		while (true) {
+			if (GetUserInput(inputStr, false)) {
+				// Process Local Commands
+				if (inputStr == "/quit" || inputStr == "/exit" || inputStr == "/close") {
+					// Notify Server we're done.
+					break;
+				}
+			
+				// Provide some feedback to the user.
+				string tmp = "You said: ";
+				tmp.append(inputStr);
+				tmp.append("\n");
+				DisplayMessage(tmp);
+			
+				// Send to Chat Server
+				SendMessage(serverSocket, CreateMessage("", user.username, inputStr));
+			}
+		}
+	}
+	
+	// Clean it all up
 	CloseSocket(serverSocket);
 	delwin(INPUT_SCREEN);
 	delwin(USER_SCREEN);
@@ -297,7 +332,7 @@ void DisplayMessage(string &msg) {
 void DisplayUserList() {
 	stringstream ss;
 	pthread_mutex_lock(&userListLock);
-	int numOfUsers = USERLIST.length();
+	int numOfUsers = USERLIST.size();
 	bool needsSummary = false;
 	if (numOfUsers > (LINES - INPUT_LINES)) {
 		numOfUsers = (LINES - INPUT_LINES) - 2;
@@ -307,7 +342,7 @@ void DisplayUserList() {
 		ss << USERLIST[i] << endl;
 	}
 	if (needsSummary) {
-		ss << "---" << endl << USERLIST.length() << " USERS";
+		ss << "---" << endl << USERLIST.size() << " USERS";
 	}
 	
 	string tmp = ss.str();
@@ -316,6 +351,26 @@ void DisplayUserList() {
 	// Show screen
 	wrefresh(USER_SCREEN);
 	pthread_mutex_unlock(&userListLock);
+}
+
+void* ServerThread(void* args_p) {
+  
+  // Local Variables
+  threadArgs* tmp = (threadArgs*) args_p;
+  int hostSock = tmp -> serverSocket;
+  delete tmp;
+
+  // Detach Thread to ensure that resources are deallocated on return.
+  pthread_detach(pthread_self());
+
+  // Communicate with Client
+  ProcessIncomingData(hostSock);
+
+  // Close Client socket
+  close(hostSock);
+
+  // Quit thread
+  pthread_exit(NULL);
 }
 
 void ProcessIncomingData(int serverSocket) {
@@ -344,9 +399,10 @@ void ProcessIncomingData(int serverSocket) {
       // Socket has data, let's retrieve it.
       RESCMessage incMessage = ReadMessage(serverSocket);
       // Drop messages that are garbage.
-      if (incMessage.jobType != INVALID_MSG) {
+      if (incMessage.job.jobType != INVALID_MSG) {
         // Should run through a message processor.
-		  displayMsg(clientMsg);
+        string msg = string(incMessage.data.data);
+		  DisplayMessage(msg);
 		  wrefresh(INPUT_SCREEN);
       }
     }

@@ -303,6 +303,7 @@ RESCMessage CreateMessage(string to, string from, string message)
 	
 	bool SendMessage(int outgoingSocket, RESCMessage msg)
 	{
+		if (msg.job.jobType == INVALID_MSG) return false;
 		// SendMessage
 		int msgLength = sizeof(RESCMessage);
 		char msgBuff[msgLength];
