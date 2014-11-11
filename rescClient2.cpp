@@ -412,9 +412,9 @@ void ProcessIncomingData(int serverSocket) {
       // Socket has data, let's retrieve it.
       RESCMessage incMessage = ReadMessage(serverSocket);
       // Drop messages that are garbage.
-      if (incMessage.job.jobType != INVALID_MSG) {
+      if (incMessage.jobType != INVALID_MSG) {
         // Should run through a message processor.
-        string msg = string(incMessage.job.source) + " said: " + string(incMessage.data.data);
+        string msg = string(incMessage.source) + " said: " + string(incMessage.data) + "\n";
 		DisplayMessage(msg);
 	    wrefresh(INPUT_SCREEN);
       }

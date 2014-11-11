@@ -27,6 +27,7 @@ using namespace std;
 
 namespace RESC {
 	const int IDSIZE = 9;
+	const int MSGSIZE = 256;
 
 	enum RESCJobType {
 		INVALID_MSG,
@@ -38,34 +39,30 @@ namespace RESC {
 		INVALID_AUTH,
 		SUCCESSFUL_AUTH
 	};
-
-	struct RESCJob {
-		char id[IDSIZE];
-		RESCJobType jobType;
-		char dest[2 * IDSIZE];
-		char source[2 * IDSIZE];
-		char dataId[IDSIZE];
-	};
 	
-	struct RESCJobData {
-		char id[IDSIZE];
-		char data[256];
-	};
-	
-	struct RESCServer {
-		char id[IDSIZE];
-		char hostname[128];
-	};
-	
+	// Classify this.... 
 	struct RESCUser {
-		char id[IDSIZE];
+		int id;
 		char username[IDSIZE];
 		char password[IDSIZE];
 	};
 	
+	struct RESCServer {
+		int id;
+	};
+	
 	struct RESCMessage {
-		RESCJob job;
-		RESCJobData data;
+		int id;
+		RESCJobType jobType;
+		char dest[2 * IDSIZE];
+		char source[2 * IDSIZE];
+		char dataId[IDSIZE];
+		char data[MSGSIZE];
+	};
+	
+	struct RESCJob {
+		int userID;
+		int messageID;
 	};
 	
 	struct RESCAuthRequest {
@@ -80,22 +77,22 @@ namespace RESC {
 RESCMessage CreateMessage(string to, string from, string message)
 {
 	RESCMessage rescJob;
-	if (!from.length() || message.length() > 256) {
-		rescJob.job.jobType = INVALID_MSG;
+	if (!from.length() || message.length() > MSGSIZE) {
+		rescJob.jobType = INVALID_MSG;
 		return rescJob;
 	}
 	// BUILD JOB
 	if (to.length() < 1) {
 		// No To value, so this is a global message.
-		rescJob.job.jobType = BROADCAST_MSG;
+		rescJob.jobType = BROADCAST_MSG;
 	} else {
-		rescJob.job.jobType = DIRECT_MSG;
+		rescJob.jobType = DIRECT_MSG;
 	}
-	strcpy(rescJob.job.dest, to.c_str());
-	strcpy(rescJob.job.source, from.c_str());
+	strcpy(rescJob.dest, to.c_str());
+	strcpy(rescJob.source, from.c_str());
 	
 	// BUILD JOBDATA
-	strcpy(rescJob.data.data, message.c_str());
+	strcpy(rescJob.data, message.c_str());
 	
 	
 	return rescJob;
@@ -188,54 +185,11 @@ RESCMessage CreateMessage(string to, string from, string message)
 		
 	}
 	
-	RESCJobData ReadJobData(int incomingSocket)
+	RESCMessage ReadMessage(int incomingSocket)
 	{
 		// Retrieve msg
-		RESCJobData tmp;
-		int RESCMessageSize = sizeof(RESCJobData);
-		int bytesLeft = RESCMessageSize;
-		char* buffer = new char[bytesLeft];
-		char* buffPTR = buffer;
-		while (bytesLeft > 0){
-			int bytesRecvd = recv(incomingSocket, buffPTR, RESCMessageSize, 0);
-			if (bytesRecvd <= 0) {
-				// Failed to Read for some reason.
-				cerr << "Could not recv bytes. Closing socket: " << incomingSocket << "." << endl;
-				memcpy(&tmp, buffer, RESCMessageSize);
-				return tmp;
-			}
-			bytesLeft = bytesLeft - bytesRecvd;
-			buffPTR = buffPTR + bytesRecvd;
-		}
-		memcpy(&tmp, buffer, RESCMessageSize);
-		delete [] buffer;
-		return tmp;
-	}
-	
-	bool SendJobData(int outgoingSocket, RESCJobData msg)
-	{
-		// SendMessage
-		int msgLength = sizeof(RESCJobData);
-		char msgBuff[msgLength];
-		for (short i = 0; i < msgLength; i++) {
-			msgBuff[i] = ((char*)&msg)[i];
-		}
-
-		// Since they now know how many bytes to receive, we'll send the message
-		int msgSent = send(outgoingSocket, msgBuff, msgLength, 0);
-		if (msgSent != msgLength){
-			// Failed to send
-			cerr << "Unable to send data. Closing socket: " << outgoingSocket << "." << endl;
-			return false;
-		}
-
-		return true;
-	}
-	RESCJob ReadJob(int incomingSocket)
-	{
-		// Retrieve msg
-		RESCJob tmp;
-		int RESCMessageSize = sizeof(RESCJob);
+		RESCMessage tmp;
+		int RESCMessageSize = sizeof(RESCMessage);
 		int bytesLeft = RESCMessageSize;
 		char* buffer = new char[bytesLeft];
 		char* buffPTR = buffer;
@@ -256,54 +210,9 @@ RESCMessage CreateMessage(string to, string from, string message)
 		return tmp;
 	}
 	
-	bool SendJob(int outgoingSocket, RESCJob msg)
-	{
-		// SendMessage
-		int msgLength = sizeof(RESCJob);
-		char msgBuff[msgLength];
-		for (short i = 0; i < msgLength; i++) {
-			msgBuff[i] = ((char*)&msg)[i];
-		}
-
-		// Since they now know how many bytes to receive, we'll send the message
-		int msgSent = send(outgoingSocket, msgBuff, msgLength, 0);
-		if (msgSent != msgLength){
-			// Failed to send
-			cerr << "Unable to send data. Closing socket: " << outgoingSocket << "." << endl;
-			return false;
-		}
-
-		return true;
-	}
-	
-	RESCMessage ReadMessage(int incomingSocket)
-	{
-		// Retrieve msg
-		RESCMessage tmp;
-		int RESCMessageSize = sizeof(RESCMessage);
-		int bytesLeft = RESCMessageSize;
-		char* buffer = new char[bytesLeft];
-		char* buffPTR = buffer;
-		while (bytesLeft > 0){
-			int bytesRecvd = recv(incomingSocket, buffPTR, RESCMessageSize, 0);
-			if (bytesRecvd <= 0) {
-				// Failed to Read for some reason.
-				cerr << "Could not recv bytes. Closing socket: " << incomingSocket << "." << endl;
-				memcpy(&tmp, buffer, RESCMessageSize);
-				tmp.job.jobType = INVALID_MSG;
-				return tmp;
-			}
-			bytesLeft = bytesLeft - bytesRecvd;
-			buffPTR = buffPTR + bytesRecvd;
-		}
-		memcpy(&tmp, buffer, RESCMessageSize);
-		delete [] buffer;
-		return tmp;
-	}
-	
 	bool SendMessage(int outgoingSocket, RESCMessage msg)
 	{
-		if (msg.job.jobType == INVALID_MSG) return false;
+		if (msg.jobType == INVALID_MSG) return false;
 		// SendMessage
 		int msgLength = sizeof(RESCMessage);
 		char msgBuff[msgLength];

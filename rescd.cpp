@@ -31,6 +31,8 @@
 // RESC Framework
 #include "rescFramework.h"
 
+using namespace std;
+
 // DATA TYPES
 struct threadArgs {
   int requestSocket;
@@ -39,12 +41,9 @@ struct threadArgs {
 // Globals
 int MAXPENDING = 20;
 int conn_socket;
-deque<RESC::RESCServer*> serverList;
-unordered_map<string, RESC::RESCServer*> serverDetails;
-pthread_mutex_t ServerListLock;
-pthread_mutex_t ServerDetailsLock;
-int ServerListStatus = pthread_mutex_init(&ServerListLock, NULL);
-int ServerDetailsStatus = pthread_mutex_init(&ServerDetailsLock, NULL);
+unordered_map<string, deque<RESC::RESCMessage> > MSG_QUEUE;
+pthread_mutex_t MsgQueueLock;
+int msgQueueStatus = pthread_mutex_init(&MsgQueueLock, NULL);
 
 // Function Prototypes
 void* requestThread(void* args_p);
@@ -57,12 +56,15 @@ void ProcessRequest(int requestSock);
 // pre: none
 // post: none
 
+void ProcessMessage(RESC::RESCMessage msg);
+// Function processess incoming messages.
+// pre: none
+// post: none
+
 void ProcessSignal(int sig);
 // Function interprets signal interrupts so we can handle safe closure of threads.
 // pre: none
 // post: none
-
-using namespace std;
 
 int main (int argc, char * argv[])
 {
@@ -164,8 +166,8 @@ void* requestThread(void* args_p) {
 
 void ProcessRequest(int requestSock) {
 
-	// GetMessages
-	string message;
+	// Polling structures
+	string uname = "";
 	fd_set requestfd;
 	struct timeval tv;
 	int sockIndex = 0;
@@ -186,13 +188,84 @@ void ProcessRequest(int requestSock) {
 		tv.tv_usec = 100000;
 		FD_SET(requestSock, &requestfd);
 		if (pollSock != 0 && pollSock != -1) {
-			RESC::RESCMessage request = RESC::ReadMessage(requestSock);
-			message = string(request.job.source) + " said: " + string(request.data.data);
-			cout << "Message was : " << message << endl;
-			message.clear();
-			message = string(request.data.data);
-			if (message == "/quit" || message == "/exit" || message == "/close") break;
+			// READ DATA
+			RESC::RESCMessage msg = RESC::ReadMessage(requestSock);
+			if (msg.jobType != RESC::INVALID_MSG) {
+				// Process this
+				if (uname == "") {
+					uname = string(msg.source);
+				}
+				string message = string(msg.data);
+				cout << "Converted Message is: " << message << endl;
+				if (message == "/quit" || message == "/close" || message == "/exit") {
+					break;
+				}
+				ProcessMessage(msg);
+			}
 		}
+		
+		// Send Data
+		pthread_mutex_lock(&MsgQueueLock);
+		// Find user's Msg queue
+		unordered_map<string, deque<RESC::RESCMessage> >::iterator jobIter = MSG_QUEUE.find(uname);
+		if (jobIter == MSG_QUEUE.end()) {
+			// Unable to find msg queue... Add it?
+			MSG_QUEUE.insert(make_pair<string, deque<RESC::RESCMessage> >(uname, deque<RESC::RESCMessage>()));
+		} else {
+			// Found msg queue. Let's add to it!
+			for (int i = 0; i <jobIter -> second.size(); i++) {
+				RESC::SendMessage(requestSock, jobIter -> second[i]);
+			}
+			jobIter -> second.clear();
+		}
+		pthread_mutex_unlock(&MsgQueueLock);
+		
+	}
+	
+	// Remove from MSG_QUEUE
+	pthread_mutex_lock(&MsgQueueLock);
+	// Find user's Msg queue
+	unordered_map<string, deque<RESC::RESCMessage> >::iterator jobIter = MSG_QUEUE.find(uname);
+	if (jobIter == MSG_QUEUE.end()) {
+		// Unable to Find MSG_QUEUE, so they never built one.
+	} else {
+		MSG_QUEUE.erase(uname);
+	}
+	pthread_mutex_unlock(&MsgQueueLock);
+}
+
+void ProcessMessage(RESC::RESCMessage msg) {
+	// Switch on message type
+	if (msg.jobType == RESC::INVALID_MSG) {
+		return;
+	}
+	string dest = string(msg.dest);
+	string source = string(msg.source);
+	if (msg.jobType == RESC::BROADCAST_MSG) {
+		// Add to all Users
+		pthread_mutex_lock(&MsgQueueLock);
+		unordered_map<string, deque<RESC::RESCMessage> >::iterator queIter = MSG_QUEUE.begin();
+		for (; queIter != MSG_QUEUE.end(); queIter++) {
+			if (queIter ->first != source) {
+				queIter -> second.push_back(msg);
+			}
+		}
+		pthread_mutex_unlock(&MsgQueueLock);
+	} else if (msg.jobType == RESC::DIRECT_MSG) {
+		// Add to user's queue
+		pthread_mutex_lock(&MsgQueueLock);
+		// Find user's Msg queue
+		unordered_map<string, deque<RESC::RESCMessage> >::iterator jobIter = MSG_QUEUE.find(dest);
+		if (jobIter == MSG_QUEUE.end()) {
+			// Unable to find msg queue... Add it?
+			MSG_QUEUE.insert(make_pair<string, deque<RESC::RESCMessage> >(dest, deque<RESC::RESCMessage>()));
+			jobIter = MSG_QUEUE.find(dest);
+			jobIter -> second.push_back(msg);
+		} else {
+			// Found msg queue. Let's add to it!
+			jobIter -> second.push_back(msg);
+		}
+		pthread_mutex_unlock(&MsgQueueLock);
 	}
 }
 
