@@ -41,9 +41,15 @@ struct threadArgs {
 // Globals
 int MAXPENDING = 20;
 int conn_socket;
-unordered_map<string, deque<RESC::RESCMessage> > MSG_QUEUE;
+unordered_map<int, deque<RESC::Message> > MSG_QUEUE;
 pthread_mutex_t MsgQueueLock;
 int msgQueueStatus = pthread_mutex_init(&MsgQueueLock, NULL);
+unordered_map<string, int> USER_LIST;
+pthread_mutex_t UserListLock;
+int usgListStatus = pthread_mutex_init(&UserListLock, NULL);
+unordered_map<string, string> USER_REPO;
+pthread_mutex_t UserRepositoryLock;
+int UserRepositoryStatus = pthread_mutex_init(&UserRepositoryLock, NULL);
 
 // Function Prototypes
 void* requestThread(void* args_p);
@@ -56,13 +62,23 @@ void ProcessRequest(int requestSock);
 // pre: none
 // post: none
 
-void ProcessMessage(RESC::RESCMessage msg);
+void GetUserList(string destUser);
+// Function Grabs list of users online
+// pre: none
+// post: none
+
+bool ProcessMessage(RESC::Message msg);
 // Function processess incoming messages.
 // pre: none
 // post: none
 
 void ProcessSignal(int sig);
 // Function interprets signal interrupts so we can handle safe closure of threads.
+// pre: none
+// post: none
+
+bool ValidateUser(RESC::Message request, RESC::RESCUser &user);
+// Function checks user request for proper credentials
 // pre: none
 // post: none
 
@@ -137,7 +153,6 @@ int main (int argc, char * argv[])
 			close(requestSock);
 			pthread_exit(NULL);
 		}
-
 	}
 
 	return 0;
@@ -167,10 +182,28 @@ void* requestThread(void* args_p) {
 void ProcessRequest(int requestSock) {
 
 	// Polling structures
-	string uname = "";
+	RESC::RESCUser user;
 	fd_set requestfd;
 	struct timeval tv;
 	int sockIndex = 0;
+	
+	// Authenticate User
+	RESC::Message authRequest;
+	bool hasValidated;
+	do {
+		authRequest = RESC::ReadMessage(requestSock);
+		if (authRequest.hdr.msgType == RESC::INVALID_MSG) return;
+		hasValidated = ValidateUser(authRequest, user);
+		if (!hasValidated) {
+			// Response
+			RESC::Message authResponse = RESC::CreateAuthResponse(0, false);
+			RESC::SendMessage(requestSock, authResponse);
+		}
+	} while (!hasValidated);
+	RESC::Message authResponse = RESC::CreateAuthResponse(user.id, true);
+	RESC::SendMessage(requestSock, authResponse);
+	
+	// Announce User, Update UserLists
 	
 	// Clear FD_Set and set timeout.
 	FD_ZERO(&requestfd);
@@ -189,84 +222,109 @@ void ProcessRequest(int requestSock) {
 		FD_SET(requestSock, &requestfd);
 		if (pollSock != 0 && pollSock != -1) {
 			// READ DATA
-			RESC::RESCMessage msg = RESC::ReadMessage(requestSock);
-			if (msg.jobType != RESC::INVALID_MSG) {
-				// Process this
-				if (uname == "") {
-					uname = string(msg.source);
-				}
-				string message = string(msg.data);
-				cout << "Converted Message is: " << message << endl;
-				if (message == "/quit" || message == "/close" || message == "/exit") {
-					break;
-				}
-				ProcessMessage(msg);
-			}
+			RESC::Message msg = RESC::ReadMessage(requestSock);
+			if (!ProcessMessage(msg)) break;
 		}
 		
 		// Send Data
 		pthread_mutex_lock(&MsgQueueLock);
-		// Find user's Msg queue
-		unordered_map<string, deque<RESC::RESCMessage> >::iterator jobIter = MSG_QUEUE.find(uname);
-		if (jobIter == MSG_QUEUE.end()) {
-			// Unable to find msg queue... Add it?
-			MSG_QUEUE.insert(make_pair<string, deque<RESC::RESCMessage> >(uname, deque<RESC::RESCMessage>()));
-		} else {
-			// Found msg queue. Let's add to it!
-			for (int i = 0; i <jobIter -> second.size(); i++) {
-				RESC::SendMessage(requestSock, jobIter -> second[i]);
+		unordered_map<int, deque<RESC::Message> >::iterator msgIter = MSG_QUEUE.find(user.id);
+		if (msgIter != MSG_QUEUE.end()) {
+			while (!(*msgIter).second.empty()) {
+				SendMessage(requestSock, (*msgIter).second.front());
+				(*msgIter).second.pop_front();
 			}
-			jobIter -> second.clear();
 		}
 		pthread_mutex_unlock(&MsgQueueLock);
-		
-	}
-	
-	// Remove from MSG_QUEUE
-	pthread_mutex_lock(&MsgQueueLock);
-	// Find user's Msg queue
-	unordered_map<string, deque<RESC::RESCMessage> >::iterator jobIter = MSG_QUEUE.find(uname);
-	if (jobIter == MSG_QUEUE.end()) {
-		// Unable to Find MSG_QUEUE, so they never built one.
-	} else {
-		MSG_QUEUE.erase(uname);
-	}
-	pthread_mutex_unlock(&MsgQueueLock);
+	}	
 }
 
-void ProcessMessage(RESC::RESCMessage msg) {
-	// Switch on message type
-	if (msg.jobType == RESC::INVALID_MSG) {
-		return;
+void GetUserList(string destUser) {
+
+}
+
+
+
+bool ProcessMessage(RESC::Message msg) {
+	if (msg.hdr.msgType == RESC::INVALID_MSG) return false;
+	
+	unordered_map<int, deque<RESC::Message> >::iterator msgIter;
+	switch(msg.hdr.msgType) {
+		case RESC::BROADCAST_MSG:
+			pthread_mutex_lock(&MsgQueueLock);
+				// Add to all the queues
+				msgIter = MSG_QUEUE.begin();
+				while (msgIter != MSG_QUEUE.end()) {
+					(*msgIter).second.push_back(msg);
+					msgIter++;
+				}
+			pthread_mutex_unlock(&MsgQueueLock);
+			return true;
+			break;
+		case RESC::DIRECT_MSG:
+			pthread_mutex_lock(&MsgQueueLock);
+				// Add to all the queues
+				msgIter = MSG_QUEUE.find(msg.hdr.toUserId);
+				if (msgIter != MSG_QUEUE.end()) {
+					(*msgIter).second.push_back(msg);
+				}
+			pthread_mutex_unlock(&MsgQueueLock);
+			return true;
+			break;
+		case RESC::USERLIST_MSG:
+			return true;
+			break;
+		default:
+			break;
 	}
-	string dest = string(msg.dest);
-	string source = string(msg.source);
-	if (msg.jobType == RESC::BROADCAST_MSG) {
-		// Add to all Users
-		pthread_mutex_lock(&MsgQueueLock);
-		unordered_map<string, deque<RESC::RESCMessage> >::iterator queIter = MSG_QUEUE.begin();
-		for (; queIter != MSG_QUEUE.end(); queIter++) {
-			if (queIter ->first != source) {
-				queIter -> second.push_back(msg);
+	
+	return false;
+}
+
+bool ValidateUser(RESC::Message request, RESC::RESCUser &user)
+{
+	bool isValidated = false;
+	stringstream ss;
+	string username;
+	string password;
+	
+	if (request.hdr.msgType == RESC::AUTH_MSG) {
+		for (int i = 0; i < request.body.length(); i++) {
+			if (request.body[i] == '|') {
+				// found the divider
+				username = ss.str();
+				ss.str("");
+				ss.clear();
+			} else {
+				ss << request.body[i];
 			}
 		}
-		pthread_mutex_unlock(&MsgQueueLock);
-	} else if (msg.jobType == RESC::DIRECT_MSG) {
-		// Add to user's queue
-		pthread_mutex_lock(&MsgQueueLock);
-		// Find user's Msg queue
-		unordered_map<string, deque<RESC::RESCMessage> >::iterator jobIter = MSG_QUEUE.find(dest);
-		if (jobIter == MSG_QUEUE.end()) {
-			// Unable to find msg queue... Add it?
-			MSG_QUEUE.insert(make_pair<string, deque<RESC::RESCMessage> >(dest, deque<RESC::RESCMessage>()));
-			jobIter = MSG_QUEUE.find(dest);
-			jobIter -> second.push_back(msg);
+		password = ss.str();
+		ss.str("");
+		ss.clear();
+		pthread_mutex_lock(&UserRepositoryLock);
+		unordered_map<string, string>::iterator userIter = USER_REPO.find(username);
+		if (userIter != USER_REPO.end()) {
+			if (!password.compare((*userIter).second)) {
+				isValidated = true;
+			}
 		} else {
-			// Found msg queue. Let's add to it!
-			jobIter -> second.push_back(msg);
+			// We do not have this user. Add new user
+			USER_REPO.insert(make_pair<string, string>(username, password));
+			isValidated = true;
 		}
-		pthread_mutex_unlock(&MsgQueueLock);
+		pthread_mutex_unlock(&UserRepositoryLock);
 	}
+	
+	if (isValidated) {
+		user.username = username;
+		pthread_mutex_lock(&UserListLock);
+		user.id = USER_LIST.size() + 1;
+		USER_LIST.insert(make_pair<string, int>(user.username, user.id));
+		pthread_mutex_unlock(&UserListLock);
+	}
+	
+	return isValidated;
 }
 
 void ProcessSignal(int sig) {

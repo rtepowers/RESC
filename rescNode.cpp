@@ -1,10 +1,9 @@
 // AUTHOR: Ray Powers
 // DATE: October 25, 2014
-// FILE: rescNode.cpp
+// FILE: RESCD - Daemon tool for the RESC system.
 
-// DESCRIPTION: RescNode.cpp will be the v2 replacement of rescServer.cpp.
-// 				It will take advantage of a lot less clutter in code and
-//				will attempt to bring low latency to serving messages.
+// DESCRIPTION: RESCD will be v2 of the rescTracker. This v2 will improve throughput
+// 				with a low latency design with SOA. 
 
 // Standard Library
 #include<iostream>
@@ -24,17 +23,31 @@
 #include<arpa/inet.h>
 #include<unistd.h>
 #include<netdb.h>
+#include<csignal>
 
 // Multithreading
 #include<pthread.h>
 
 // RESC Framework
 #include "rescFramework.h"
+#include "Message.h"
+
+using namespace std;
 
 // DATA TYPES
 struct threadArgs {
   int requestSocket;
 };
+
+// Globals
+int MAXPENDING = 20;
+int conn_socket;
+unordered_map<string, deque<RESC::RESCMessage> > MSG_QUEUE;
+pthread_mutex_t MsgQueueLock;
+int msgQueueStatus = pthread_mutex_init(&MsgQueueLock, NULL);
+deque<string> USER_LIST;
+pthread_mutex_t UserListLock;
+int usgListStatus = pthread_mutex_init(&UserListLock, NULL);
 
 // Function Prototypes
 void* requestThread(void* args_p);
@@ -47,10 +60,84 @@ void ProcessRequest(int requestSock);
 // pre: none
 // post: none
 
-using namespace std;
+void ProcessSignal(int sig);
+// Function interprets signal interrupts so we can handle safe closure of threads.
+// pre: none
+// post: none
 
-int main (int argc, int * argv[])
+int main (int argc, char * argv[])
 {
+	// Process Arguments
+	unsigned short serverPort; 
+	if (argc != 2){
+		// Incorrect number of arguments
+		cerr << "Incorrect number of arguments. Please try again." << endl;
+		return -1;
+	}
+	serverPort = atoi(argv[1]); 
+	
+	// Create socket connection
+	conn_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (conn_socket < 0){
+		cerr << "Error with socket." << endl;
+		exit(-1);
+	}
+	
+	// Set the socket Fields
+	struct sockaddr_in serverAddress;
+	serverAddress.sin_family = AF_INET;    // Always AF_INET
+	serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+	serverAddress.sin_port = htons(serverPort);
+	
+	// Assign Port to socket
+	int sock_status = bind(conn_socket, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
+	if (sock_status < 0) {
+		cerr << "Error with bind." << endl;
+		exit(-1);
+	}
+	
+	// Set socket to listen.
+	int listen_status = listen(conn_socket, MAXPENDING);
+	if (listen_status < 0) {
+		cerr << "Error with listening." << endl;
+		exit(-1);
+	}
+	
+	// We are good to go! Alert admin running that we can now accept requests
+	cout << endl << "RESCD: Ready to accept connections. " << endl;
+	
+	
+	// Process Interrupts so we can gracefully exit()
+	struct sigaction sigIntHandler;
+	sigIntHandler.sa_handler = ProcessSignal;
+	sigemptyset(&sigIntHandler.sa_mask);
+	sigIntHandler.sa_flags = 0;
+	sigaction(SIGINT, &sigIntHandler, NULL);
+	
+	// Accept connections
+	while (true) {
+		// Accept connections
+		struct sockaddr_in clientAddress;
+		socklen_t addrLen = sizeof(clientAddress);
+		int requestSock = accept(conn_socket, (struct sockaddr*) &clientAddress, &addrLen);
+		if (requestSock < 0) {
+			cerr << "Error accepting connections." << endl;
+			exit(-1);
+		}
+
+		// Create child thread to handle process
+		struct threadArgs* args_p = new threadArgs;
+		args_p -> requestSocket = requestSock;
+		pthread_t tid;
+		int threadStatus = pthread_create(&tid, NULL, requestThread, (void*)args_p);
+		if (threadStatus != 0){
+			// Failed to create child thread
+			cerr << "Failed to create child process." << endl;
+			close(requestSock);
+			pthread_exit(NULL);
+		}
+
+	}
 
 	return 0;
 }
@@ -58,26 +145,58 @@ int main (int argc, int * argv[])
 
 void* requestThread(void* args_p) {
   
-  // Local Variables
-  threadArgs* tmp = (threadArgs*) args_p;
-  int requestSocket = tmp -> requestSocket;
-  delete tmp;
+	// Local Variables
+	threadArgs* tmp = (threadArgs*) args_p;
+	int requestSocket = tmp -> requestSocket;
+	delete tmp;
 
-  // Detach Thread to ensure that resources are deallocated on return.
-  pthread_detach(pthread_self());
+	// Detach Thread to ensure that resources are deallocated on return.
+	pthread_detach(pthread_self());
 
-  // Handle Request
-  ProcessRequest(requestSocket);
+	// Handle Request
+	ProcessRequest(requestSocket);
 
-  // Close Client socket
-  close(requestSocket);
+	// Close Client socket
+	close(requestSocket);
 
-  // Quit thread
-  pthread_exit(NULL);
+	// Quit thread
+	pthread_exit(NULL);
 }
 
 void ProcessRequest(int requestSock) {
 
-	// Parse messages
-	//RESCMessage = RESC::ReadRequest(requestSock);
+	// Polling structures
+	string uname = "";
+	fd_set requestfd;
+	struct timeval tv;
+	int sockIndex = 0;
+	
+	// Clear FD_Set and set timeout.
+	FD_ZERO(&requestfd);
+	tv.tv_sec = 2;
+	tv.tv_usec = 100000;
+
+	// Initialize Data
+	FD_SET(requestSock, &requestfd);
+	sockIndex = requestSock + 1;
+	
+	while (true) {
+		// Read Data
+		int pollSock = select(sockIndex, &requestfd, NULL, NULL, &tv);
+		tv.tv_sec = 1;
+		tv.tv_usec = 100000;
+		FD_SET(requestSock, &requestfd);
+		if (pollSock != 0 && pollSock != -1) {
+			// READ DATA
+		}
+		
+		// Send Data
+		
+	}
+}
+
+void ProcessSignal(int sig) {
+	close(conn_socket);
+	cout << endl << endl << "Shutting down server." << endl;
+	exit(1);
 }

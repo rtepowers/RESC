@@ -26,210 +26,202 @@
 using namespace std;
 
 namespace RESC {
-	const int IDSIZE = 9;
-	const int MSGSIZE = 256;
 
-	enum RESCJobType {
-		INVALID_MSG,
-		BROADCAST_MSG,
-		DIRECT_MSG
-	};
-	
-	enum RESCAuthStatus {
-		INVALID_AUTH,
-		SUCCESSFUL_AUTH
-	};
-	
-	// Classify this.... 
-	struct RESCUser {
-		int id;
-		char username[IDSIZE];
-		char password[IDSIZE];
-	};
-	
-	struct RESCServer {
-		int id;
-	};
-	
-	struct RESCMessage {
-		int id;
-		RESCJobType jobType;
-		char dest[2 * IDSIZE];
-		char source[2 * IDSIZE];
-		char dataId[IDSIZE];
-		char data[MSGSIZE];
-	};
-	
-	struct RESCJob {
-		int userID;
-		int messageID;
-	};
-	
-	struct RESCAuthRequest {
-		char encryptedData[2 * IDSIZE];
-	};
-	
-	struct RESCAuthResult {
-		RESCAuthStatus status;
-	};
+enum MsgType {
+	INVALID_MSG,
+	BROADCAST_MSG,
+	DIRECT_MSG,
+	AUTH_MSG,
+	AUTH_RESP_MSG,
+	USERLIST_MSG
+};
 
-// Message Helper Functions
-RESCMessage CreateMessage(string to, string from, string message)
+struct MsgHeader {
+	int toUserId;
+	int fromUserId;
+	MsgType msgType;
+};
+
+struct Message {
+	MsgHeader hdr;
+	string body;
+};
+
+struct RESCUser {
+	int id;
+	string username;
+};
+
+// Framework Helper functions
+Message CreateMessage(MsgType type, int to, int from, string input) 
 {
-	RESCMessage rescJob;
-	if (!from.length() || message.length() > MSGSIZE) {
-		rescJob.jobType = INVALID_MSG;
-		return rescJob;
-	}
-	// BUILD JOB
-	if (to.length() < 1) {
-		// No To value, so this is a global message.
-		rescJob.jobType = BROADCAST_MSG;
-	} else {
-		rescJob.jobType = DIRECT_MSG;
-	}
-	strcpy(rescJob.dest, to.c_str());
-	strcpy(rescJob.source, from.c_str());
+	Message msg; 
+	msg.hdr.toUserId = to;
+	msg.hdr.fromUserId = from;
+	msg.hdr.msgType = type;
+	msg.body = input;
 	
-	// BUILD JOBDATA
-	strcpy(rescJob.data, message.c_str());
+	return msg;
+}
 	
-	
-	return rescJob;
+Message CreateAuthResponse(int userId, bool wasSuccessful)
+{
+	Message msg;
+	msg.hdr.msgType = AUTH_RESP_MSG;
+	msg.hdr.toUserId = userId;
+	msg.body = (wasSuccessful)? "SUCCESSFUL" : "UNAUTHORIZED";
+	return msg;
+}
+
+bool CheckAuthResponse(Message msg) 
+{
+	if (msg.hdr.msgType == INVALID_MSG) return false;
+	return (!msg.body.compare("SUCCESSFUL"));
 }
 
 // Network Helper Functions
-	bool SendAuthRequest(int outgoingSocket, RESCAuthRequest request)
-	{
-		int reqLength = sizeof(RESCAuthRequest);
-		char reqBuff[reqLength];
-		for (short i = 0; i < reqLength; i++) {
-			reqBuff[i] = ((char*)&request)[i];
-		}
-		int didSend = send(outgoingSocket, reqBuff, reqLength, 0);
-		if (didSend != reqLength) {
-			cerr << "Unable to Authorize user. Socket: " << outgoingSocket << endl;
+	bool SendHeader(int outSocket, MsgHeader hdr) {
+		int hdrLength = sizeof(MsgHeader);
+		char * hdrBuff = (char*)&hdr;
+		int hdrSent = send(outSocket, hdrBuff, hdrLength, 0);
+		if (hdrSent != hdrLength) {
+			cerr << "Unable to send MsgHeader on socket: " << outSocket << endl;
 			return false;
-		}
-		
-		return true;
-	}
-	RESCAuthRequest ReadAuthRequest(int incomingSocket)
-	{
-		RESCAuthRequest response;
-		int resLength = sizeof(RESCAuthRequest);
-		int bytesLeft = resLength;
-		char* buffer = new char[resLength];
-		char* buffPtr = buffer;
-		while (bytesLeft > 0) {
-			int bytesRecvd = recv(incomingSocket, buffPtr, resLength, 0);
-			if (bytesRecvd <= 0) {	
-				cerr << "Unable to receive Authorization Response. Socket: "<< incomingSocket << endl;
-				return response;
-			}
-			bytesLeft = bytesLeft - bytesRecvd;
-			buffPtr = buffPtr + bytesRecvd;
-		}
-		
-		memcpy(&response, buffer, resLength);
-		delete [] buffer;
-		return response;
-	}
-	
-	RESCAuthResult ReadAuthResult(int incomingSocket)
-	{
-		RESCAuthResult response;
-		int resLength = sizeof(RESCAuthResult);
-		int bytesLeft = resLength;
-		char* buffer = new char[resLength];
-		char* buffPtr = buffer;
-		while (bytesLeft > 0) {
-			int bytesRecvd = recv(incomingSocket, buffPtr, resLength, 0);
-			if (bytesRecvd <= 0) {	
-				cerr << "Unable to receive Authorization Response. Socket: "<< incomingSocket << endl;
-				return response;
-			}
-			bytesLeft = bytesLeft - bytesRecvd;
-			buffPtr = buffPtr + bytesRecvd;
-		}
-		
-		memcpy(&response, buffer, resLength);
-		delete [] buffer;
-		return response;
-	}
-	
-	bool SendAuthResult(int outgoingSocket, RESCAuthResult result)
-	{
-		int reqLength = sizeof(RESCAuthResult);
-		char reqBuff[reqLength];
-		for (short i = 0; i < reqLength; i++) {
-			reqBuff[i] = ((char*)&result)[i];
-		}
-		int didSend = send(outgoingSocket, reqBuff, reqLength, 0);
-		if (didSend != reqLength) {
-			cerr << "Unable to Authorize user. Socket: " << outgoingSocket << endl;
-			return false;
-		}
-		
+	 	}
 		return true;
 	}
 	
-	RESCAuthResult Authorize(int authSocket, RESCAuthRequest request)
-	{
-		RESCAuthResult result;
-		if (SendAuthRequest(authSocket, request)) {
-			return ReadAuthResult(authSocket);
-		}
-		result.status = INVALID_AUTH;
-		return result;
-		
-	}
-	
-	RESCMessage ReadMessage(int incomingSocket)
-	{
-		// Retrieve msg
-		RESCMessage tmp;
-		int RESCMessageSize = sizeof(RESCMessage);
-		int bytesLeft = RESCMessageSize;
+	MsgHeader GetHeader(int inSocket) {
+		MsgHeader hdr;
+		int hdrLength = sizeof(MsgHeader);
+		int bytesLeft = hdrLength;
 		char* buffer = new char[bytesLeft];
-		char* buffPTR = buffer;
-		while (bytesLeft > 0){
-			int bytesRecvd = recv(incomingSocket, buffPTR, RESCMessageSize, 0);
+		char* buffPtr = buffer;
+		while (bytesLeft > 0) {
+			int bytesRecvd = recv(inSocket, buffPtr, hdrLength, 0);
 			if (bytesRecvd <= 0) {
-				// Failed to Read for some reason.
-				cerr << "Could not recv bytes. Closing socket: " << incomingSocket << "." << endl;
-				memcpy(&tmp, buffer, RESCMessageSize);
-				tmp.jobType = INVALID_MSG;
-				return tmp;
+				cerr << "Could not receive MsgHeader on socket: " << inSocket << endl;
+				hdr.msgType = INVALID_MSG;
+				delete [] buffer;
+				return hdr;
 			}
-			bytesLeft = bytesLeft - bytesRecvd;
-			buffPTR = buffPTR + bytesRecvd;
+			bytesLeft -= bytesRecvd;
+			buffPtr += bytesRecvd;
 		}
-		memcpy(&tmp, buffer, RESCMessageSize);
+		memcpy(&hdr, buffer, hdrLength);
 		delete [] buffer;
-		return tmp;
+		return hdr;
 	}
 	
-	bool SendMessage(int outgoingSocket, RESCMessage msg)
-	{
-		if (msg.jobType == INVALID_MSG) return false;
-		// SendMessage
-		int msgLength = sizeof(RESCMessage);
-		char msgBuff[msgLength];
-		for (short i = 0; i < msgLength; i++) {
-			msgBuff[i] = ((char*)&msg)[i];
-		}
+	bool SendData(int outSocket, string msg) {
+	  // Local Variables
+	  int msgLength = msg.length()+1;
+	  char msgBuff[msgLength];
+	  strcpy(msgBuff, msg.c_str());
+	  msgBuff[msgLength-1] = '\0';
 
-		// Since they now know how many bytes to receive, we'll send the message
-		int msgSent = send(outgoingSocket, msgBuff, msgLength, 0);
-		if (msgSent != msgLength){
-			// Failed to send
-			cerr << "Unable to send data. Closing socket: " << outgoingSocket << "." << endl;
-			return false;
-		}
+	  // Since they now know how many bytes to receive, we'll send the message
+	  int msgSent = send(outSocket, msgBuff, msgLength, 0);
+	  if (msgSent != msgLength){
+		// Failed to send
+		cerr << "Unable to send data. Closing clientSocket: " << outSocket << "." << endl;
+		return false;
+	  }
 
-		return true;
+	  return true;
 	}
+
+	string GetData(int inSock, int messageLength) {
+
+	  // Retrieve msg
+	  int bytesLeft = messageLength;
+	  char buffer[messageLength];
+	  char* buffPTR = buffer;
+	  while (bytesLeft > 0){
+		int bytesRecv = recv(inSock, buffPTR, messageLength, 0);
+		if (bytesRecv <= 0) {
+		  // Failed to Read for some reason.
+		  cerr << "Could not recv bytes. Closing clientSocket: " << inSock << "." << endl;
+		  return "";
+		}
+		bytesLeft = bytesLeft - bytesRecv;
+		buffPTR = buffPTR + bytesRecv;
+	  }
+
+	  return buffer;
+	}
+
+	long GetInteger(int inSock) {
+
+	  // Retreive length of msg
+	  int bytesLeft = sizeof(long);
+	  long networkInt;
+	  char* bp = (char *) &networkInt;
+
+	  while (bytesLeft) {
+		int bytesRecv = recv(inSock, bp, bytesLeft, 0);
+		if (bytesRecv <= 0){
+		  // Failed to receive bytes
+		  cerr << "Failed to receive bytes. Closing clientSocket: " << inSock << "." << endl;
+		  return -1;
+		}
+		bytesLeft = bytesLeft - bytesRecv;
+		bp = bp + bytesRecv;
+	  }
+	  return ntohl(networkInt);
+	}
+
+	bool SendInteger(int HostSock, int hostInt) {
+
+	  // Local Variables
+	  long networkInt = htonl(hostInt);
+
+	  // Send Integer (as a long)
+	  int didSend = send(HostSock, &networkInt, sizeof(long), 0);
+	  if (didSend != sizeof(long)){
+		// Failed to Send
+		cerr << "Unable to send data. Closing clientSocket: " << HostSock << "."  << endl;
+		return false;
+	  }
+
+	  return true;
+	}
+	
+	void SendMessage(int outSocket, Message msg) {
+		if (msg.hdr.msgType == INVALID_MSG) {
+			// Drop this Message;
+			return;
+		} else {
+			SendHeader(outSocket, msg.hdr);
+			if (!SendInteger(outSocket, msg.body.length()+1)) {
+				cerr << "Unable to send Int. " << endl;
+				return;
+			}
+			if (!SendData(outSocket, msg.body)) {
+				cerr << "Unable to send Message. " << endl;
+				return;
+			}
+		}
+	}
+	
+	Message ReadMessage(int inSocket) {
+		Message msg;
+		msg.hdr = GetHeader(inSocket);
+		long msgLength = GetInteger(inSocket);
+		if (msgLength <= 0) {
+			cerr << "Couldn't get integer." << endl;
+			msg.hdr.msgType = INVALID_MSG;
+		}
+		string bodyMsg = GetData(inSocket, msgLength);
+		if (bodyMsg == "") {
+			cerr << "Couldn't get message." << endl;
+			msg.hdr.msgType = INVALID_MSG;
+		}
+		msg.body = bodyMsg;
+		
+		return msg;
+	}
+	
 	
 	int OpenSocket (string hostName, unsigned short serverPort) {
 	  // Local variables.

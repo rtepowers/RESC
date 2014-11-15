@@ -41,7 +41,7 @@ int displayStatus = pthread_mutex_init(&displayLock, NULL);
 unordered_map<string, RESCUser> USERMAP;
 pthread_mutex_t userMapLock;
 int userMapStatus = pthread_mutex_init(&userMapLock, NULL);
-deque<string> USERLIST;
+unordered_map<string, int> USERLIST;
 pthread_mutex_t userListLock;
 int userListStatus = pthread_mutex_init(&userListLock, NULL);
 
@@ -112,15 +112,11 @@ int main (int argc, char * argv[])
 	// Begin User Interface
 	PrepareWindows();
 	
-	// Connect To Chat Server Authentication (BOOTSTRAPPED?)
-	int authSocket = OpenSocket(hostname, serverPort+1);
-	while (!HasAuthenticated(authSocket, user)) {
-	}
-	userName = string(user.username);
-	CloseSocket(authSocket);
-	
-	// Connect to a Chat Server (BOOTSTRAPPED?)
+	// Connect To Chat Server (BOOTSTRAP?)
 	int serverSocket = OpenSocket(hostname, serverPort);
+	while (!HasAuthenticated(serverSocket, user)) {
+	}
+	userName = user.username;
 	
 	// Establish Socket Reader
 	struct threadArgs* args_p = new threadArgs;
@@ -138,7 +134,7 @@ int main (int argc, char * argv[])
 				// Process Local Commands
 				if (inputStr == "/quit" || inputStr == "/exit" || inputStr == "/close") {
 					// Notify Server we're done.
-					RESCMessage rescMsg = CreateMessage("", userName, inputStr);
+					Message rescMsg = CreateMessage(INVALID_MSG, 0, user.id, inputStr);
 					SendMessage(serverSocket, rescMsg);
 					break;
 				}
@@ -150,7 +146,7 @@ int main (int argc, char * argv[])
 				DisplayMessage(tmp);
 			
 				// Send to Chat Server
-				RESCMessage rescMsg = CreateMessage("", userName, inputStr);
+				Message rescMsg = CreateMessage(BROADCAST_MSG, 0, user.id, inputStr);
 				SendMessage(serverSocket, rescMsg);
 				
 				// Clean slate
@@ -166,11 +162,7 @@ int main (int argc, char * argv[])
 	delwin(USER_SCREEN);
 	delwin(MSG_SCREEN);
     endwin();
-    
-    string name = string(user.username);
-    cout << "User was " << name << endl;
-    cout << "threadStatus was " << threadStatus << endl;
-	cout << "serverSocket was " << serverSocket << endl;
+
 	exit(0);
 }
 
@@ -260,19 +252,20 @@ bool HasAuthenticated (int serverSocket, RESCUser &user) {
   wrefresh(INPUT_SCREEN);
   ClearInputScreen();
   
-	// Process
-	RESCAuthRequest request;
-	for (short i = 0; i < 9; i++) {
-		request.encryptedData[i] = (i > userName.length()) ? '\0' : userName[i];
-		user.username[i] = request.encryptedData[i];
-		request.encryptedData[i+9] = (i > userPwd.length()) ? '\0' : userPwd[i];
-	}
-	RESCAuthResult result = Authorize(serverSocket, request);
+  // Process
+  ss << userName << "|" << userPwd;
+  string bodyMsg = ss.str();
+  ss.str("");
+  ss.clear();
+  Message authRequest = CreateMessage(AUTH_MSG, 0, 0, bodyMsg);
+  SendMessage(serverSocket, authRequest);
+  Message authResponse = ReadMessage(serverSocket);
 
   // Evaluate Host Response
-  if (result.status == SUCCESSFUL_AUTH) {
+  if (CheckAuthResponse(authResponse)) {
     // Login Sucessful!
-    strcpy(user.username,userName.c_str());
+    user.username = userName;
+    user.id = authResponse.hdr.toUserId;
     return true;
   }
   // Login Failed
@@ -332,7 +325,7 @@ void DisplayMessage(string &msg) {
   pthread_mutex_lock(&displayLock);
   // Add Msg to screen.
   // SET Colors for window.
-  init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
+  init_pair(1, COLOR_CYAN, COLOR_BLACK);
   wbkgd(MSG_SCREEN, COLOR_PAIR(1));
   waddstr(MSG_SCREEN, msg.c_str());
   
@@ -345,20 +338,10 @@ void DisplayMessage(string &msg) {
 void DisplayUserList() {
 	stringstream ss;
 	pthread_mutex_lock(&userListLock);
-	int numOfUsers = USERLIST.size();
-	bool needsSummary = false;
-	if (numOfUsers > (LINES - INPUT_LINES)) {
-		numOfUsers = (LINES - INPUT_LINES) - 2;
-		needsSummary = true;
-	}
-	for (short i = 0; i < numOfUsers; i++) {
-		ss << USERLIST[i] << endl;
-	}
-	if (needsSummary) {
-		ss << "---" << endl << USERLIST.size() << " USERS";
-	}
 	
 	string tmp = ss.str();
+ 	init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
+	wbkgd(MSG_SCREEN, COLOR_PAIR(1));
 	waddstr(USER_SCREEN, tmp.c_str());
 	
 	// Show screen
@@ -410,13 +393,14 @@ void ProcessIncomingData(int serverSocket) {
     FD_SET(serverSocket, &hostfd);
     if (pollSock != 0 && pollSock != -1) {
       // Socket has data, let's retrieve it.
-      RESCMessage incMessage = ReadMessage(serverSocket);
+      Message incMessage = ReadMessage(serverSocket);
       // Drop messages that are garbage.
-      if (incMessage.jobType != INVALID_MSG) {
+      if (incMessage.hdr.msgType != INVALID_MSG) {
         // Should run through a message processor.
-        string msg = string(incMessage.source) + " said: " + string(incMessage.data) + "\n";
+		// Display Message
+		string msg = " said: " + incMessage.body + "\n";
 		DisplayMessage(msg);
-	    wrefresh(INPUT_SCREEN);
+		wrefresh(INPUT_SCREEN);
       }
     }
   }
