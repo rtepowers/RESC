@@ -28,91 +28,113 @@ using namespace std;
 namespace RESC {
 
 enum MsgType {
-	INVALID_MSG,
-	BROADCAST_MSG,
+	INVALID_MSG = 0,
 	DIRECT_MSG,
-	AUTH_MSG,
-	AUTH_RESP_MSG,
-	USERLIST_MSG
-};
-
-struct MsgHeader {
-	int toUserId;
-	int fromUserId;
-	MsgType msgType;
+	BROADCAST_MSG
 };
 
 struct Message {
-	MsgHeader hdr;
-	string body;
+	MsgType cmd;
+	string to;
+	string from;
+	string msg;
 };
 
-struct RESCUser {
-	int id;
+struct User {
 	string username;
+	string password;
+	bool isConnected;
 };
 
 // Framework Helper functions
-Message CreateMessage(MsgType type, int to, int from, string input) 
+bool CheckAuthResponse(string msg) 
 {
-	Message msg; 
-	msg.hdr.toUserId = to;
-	msg.hdr.fromUserId = from;
-	msg.hdr.msgType = type;
-	msg.body = input;
-	
-	return msg;
-}
-	
-Message CreateAuthResponse(int userId, bool wasSuccessful)
-{
-	Message msg;
-	msg.hdr.msgType = AUTH_RESP_MSG;
-	msg.hdr.toUserId = userId;
-	msg.body = (wasSuccessful)? "SUCCESSFUL" : "UNAUTHORIZED";
-	return msg;
+	return (!msg.compare("SUCCESSFUL"));
 }
 
-bool CheckAuthResponse(Message msg) 
+bool HasQuit(string msg)
 {
-	if (msg.hdr.msgType == INVALID_MSG) return false;
-	return (!msg.body.compare("SUCCESSFUL"));
-}
-
-// Network Helper Functions
-	bool SendHeader(int outSocket, MsgHeader hdr) {
-		int hdrLength = sizeof(MsgHeader);
-		char * hdrBuff = (char*)&hdr;
-		int hdrSent = send(outSocket, hdrBuff, hdrLength, 0);
-		if (hdrSent != hdrLength) {
-			cerr << "Unable to send MsgHeader on socket: " << outSocket << endl;
-			return false;
-	 	}
-		return true;
+	bool hasQuit = false;
+	if (msg == "/quit" || msg == "/close" || msg == "/exit"){
+		hasQuit = true;
 	}
+	return hasQuit;
+}
+
+Message ConvertMessage(string msg, string from)
+{
+	// Turn
+	// "/msg userX blahblahblah"
+	// into
+	// ("blahblahblah", "userX", "", DIRECT_MSG)
+	Message newMsg;
+	newMsg.msg = "";
+	newMsg.to = "";
+	newMsg.from = from;
+	newMsg.cmd = INVALID_MSG;
+	string cmdName = "";
 	
-	MsgHeader GetHeader(int inSocket) {
-		MsgHeader hdr;
-		int hdrLength = sizeof(MsgHeader);
-		int bytesLeft = hdrLength;
-		char* buffer = new char[bytesLeft];
-		char* buffPtr = buffer;
-		while (bytesLeft > 0) {
-			int bytesRecvd = recv(inSocket, buffPtr, hdrLength, 0);
-			if (bytesRecvd <= 0) {
-				cerr << "Could not receive MsgHeader on socket: " << inSocket << endl;
-				hdr.msgType = INVALID_MSG;
-				delete [] buffer;
-				return hdr;
+	const char * cMsg = msg.c_str();
+	if (cMsg[0] == '/') {
+		// Message was a command
+		int cmdSize = 0;
+		for (int i = 1; i < msg.length(); i++) {
+			if (cMsg[i] == ' ') {
+				cmdSize = i;
+				break;
 			}
-			bytesLeft -= bytesRecvd;
-			buffPtr += bytesRecvd;
 		}
-		memcpy(&hdr, buffer, hdrLength);
-		delete [] buffer;
-		return hdr;
+		if (cmdSize == 0) {
+			// Direct Command (ie. No Args)
+			cmdSize = msg.length();
+		}
+		// Build Command type
+		stringstream ss;
+		for (int i = 0; i < cmdSize; i++) {
+			ss << cMsg[i];
+		}
+		cmdName.append(ss.str());
+		ss.str("");
+		ss.clear();
+		
+		// Now to interpret arg-based commands.
+		if (cmdName == "/msg") {
+			int userSize = 0;
+			for (int i = cmdSize+1; i < msg.length(); i++) {
+				if (cMsg[i] == ' ') {
+					userSize = i;
+					break;
+				}
+			}
+			if (userSize == 0) {
+				// No message, just action.
+				userSize = msg.length();
+			}
+			// Build UserTo
+			for (int i = cmdSize+1; i < userSize; i++) {
+				ss << cMsg[i];
+			}
+			newMsg.to.append(ss.str());
+			ss.str("");
+			ss.clear();
+			newMsg.cmd = DIRECT_MSG;
+			
+			for (int i = userSize+1; i < msg.length();i++) {
+				ss << cMsg[i];
+			}
+			newMsg.msg.append(ss.str());
+			ss.str("");
+			ss.clear();
+		}
+	} else {
+		newMsg.cmd = BROADCAST_MSG;
+		newMsg.msg = msg;
 	}
 	
+	return newMsg;
+}
+
+// Network Helper Functions	
 	bool SendData(int outSocket, string msg) {
 	  // Local Variables
 	  int msgLength = msg.length()+1;
@@ -132,7 +154,6 @@ bool CheckAuthResponse(Message msg)
 	}
 
 	string GetData(int inSock, int messageLength) {
-
 	  // Retrieve msg
 	  int bytesLeft = messageLength;
 	  char buffer[messageLength];
@@ -187,39 +208,28 @@ bool CheckAuthResponse(Message msg)
 	  return true;
 	}
 	
-	void SendMessage(int outSocket, Message msg) {
-		if (msg.hdr.msgType == INVALID_MSG) {
-			// Drop this Message;
+	void SendMessage(int outSocket, string msg) {
+		if (!SendInteger(outSocket, msg.length()+1)) {
+			cerr << "Unable to send Int. " << endl;
 			return;
-		} else {
-			SendHeader(outSocket, msg.hdr);
-			if (!SendInteger(outSocket, msg.body.length()+1)) {
-				cerr << "Unable to send Int. " << endl;
-				return;
-			}
-			if (!SendData(outSocket, msg.body)) {
-				cerr << "Unable to send Message. " << endl;
-				return;
-			}
+		}
+		if (!SendData(outSocket, msg)) {
+			cerr << "Unable to send Message. " << endl;
+			return;
 		}
 	}
 	
-	Message ReadMessage(int inSocket) {
-		Message msg;
-		msg.hdr = GetHeader(inSocket);
+	string ReadMessage(int inSocket) {
 		long msgLength = GetInteger(inSocket);
 		if (msgLength <= 0) {
 			cerr << "Couldn't get integer." << endl;
-			msg.hdr.msgType = INVALID_MSG;
 		}
 		string bodyMsg = GetData(inSocket, msgLength);
 		if (bodyMsg == "") {
 			cerr << "Couldn't get message." << endl;
-			msg.hdr.msgType = INVALID_MSG;
 		}
-		msg.body = bodyMsg;
-		
-		return msg;
+
+		return bodyMsg;
 	}
 	
 	

@@ -38,10 +38,7 @@ WINDOW* MSG_SCREEN;
 WINDOW* USER_SCREEN;
 pthread_mutex_t displayLock;
 int displayStatus = pthread_mutex_init(&displayLock, NULL);
-unordered_map<string, RESCUser> USERMAP;
-pthread_mutex_t userMapLock;
-int userMapStatus = pthread_mutex_init(&userMapLock, NULL);
-unordered_map<string, int> USERLIST;
+deque<string> USER_LIST;
 pthread_mutex_t userListLock;
 int userListStatus = pthread_mutex_init(&userListLock, NULL);
 
@@ -86,7 +83,7 @@ void ProcessIncomingData(int serverSocket);
 // pre: none
 // post: none
 
-bool HasAuthenticated (int serverSocket, RESCUser &user);
+bool HasAuthenticated (int serverSocket, User &user);
 // Function handles authentication with the server.
 // pre: none
 // post: none
@@ -96,7 +93,7 @@ int main (int argc, char * argv[])
 	// LOCALS
 	string inputStr;
 	string userName;
-	RESCUser user;
+	User user;
 	
 	// Need to grab Command-line arguments and convert them to useful types
 	// Initialize arguments with proper variables.
@@ -134,8 +131,7 @@ int main (int argc, char * argv[])
 				// Process Local Commands
 				if (inputStr == "/quit" || inputStr == "/exit" || inputStr == "/close") {
 					// Notify Server we're done.
-					Message rescMsg = CreateMessage(INVALID_MSG, 0, user.id, inputStr);
-					SendMessage(serverSocket, rescMsg);
+					SendMessage(serverSocket, inputStr);
 					break;
 				}
 			
@@ -146,8 +142,7 @@ int main (int argc, char * argv[])
 				DisplayMessage(tmp);
 			
 				// Send to Chat Server
-				Message rescMsg = CreateMessage(BROADCAST_MSG, 0, user.id, inputStr);
-				SendMessage(serverSocket, rescMsg);
+				SendMessage(serverSocket, inputStr);
 				
 				// Clean slate
 				inputStr.clear();
@@ -213,7 +208,7 @@ void ClearInputScreen() {
 	wrefresh(INPUT_SCREEN);
 }
 
-bool HasAuthenticated (int serverSocket, RESCUser &user) {
+bool HasAuthenticated (int serverSocket, User &user) {
 
   // Locals
   stringstream ss;
@@ -257,15 +252,13 @@ bool HasAuthenticated (int serverSocket, RESCUser &user) {
   string bodyMsg = ss.str();
   ss.str("");
   ss.clear();
-  Message authRequest = CreateMessage(AUTH_MSG, 0, 0, bodyMsg);
-  SendMessage(serverSocket, authRequest);
-  Message authResponse = ReadMessage(serverSocket);
+  SendMessage(serverSocket, bodyMsg);
+  string authResponse = ReadMessage(serverSocket);
 
   // Evaluate Host Response
   if (CheckAuthResponse(authResponse)) {
     // Login Sucessful!
     user.username = userName;
-    user.id = authResponse.hdr.toUserId;
     return true;
   }
   // Login Failed
@@ -338,6 +331,9 @@ void DisplayMessage(string &msg) {
 void DisplayUserList() {
 	stringstream ss;
 	pthread_mutex_lock(&userListLock);
+	for (int i = 0; i < USER_LIST.size(); i++) {
+		ss << "| " << USER_LIST[i] << endl;
+	}
 	
 	string tmp = ss.str();
  	init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
@@ -393,15 +389,10 @@ void ProcessIncomingData(int serverSocket) {
     FD_SET(serverSocket, &hostfd);
     if (pollSock != 0 && pollSock != -1) {
       // Socket has data, let's retrieve it.
-      Message incMessage = ReadMessage(serverSocket);
-      // Drop messages that are garbage.
-      if (incMessage.hdr.msgType != INVALID_MSG) {
-        // Should run through a message processor.
-		// Display Message
-		string msg = " said: " + incMessage.body + "\n";
-		DisplayMessage(msg);
-		wrefresh(INPUT_SCREEN);
-      }
+      string incMessage = ReadMessage(serverSocket);
+	  // Display Message
+	  DisplayMessage(msg);
+	  wrefresh(INPUT_SCREEN);
     }
   }
 }

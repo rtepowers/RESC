@@ -41,15 +41,12 @@ struct threadArgs {
 // Globals
 int MAXPENDING = 20;
 int conn_socket;
-unordered_map<int, deque<RESC::Message> > MSG_QUEUE;
+unordered_map<string, deque<RESC::Message> > MSG_QUEUE;
 pthread_mutex_t MsgQueueLock;
 int msgQueueStatus = pthread_mutex_init(&MsgQueueLock, NULL);
-unordered_map<string, int> USER_LIST;
+unordered_map<string, RESC::User> USER_LIST;
 pthread_mutex_t UserListLock;
 int usgListStatus = pthread_mutex_init(&UserListLock, NULL);
-unordered_map<string, string> USER_REPO;
-pthread_mutex_t UserRepositoryLock;
-int UserRepositoryStatus = pthread_mutex_init(&UserRepositoryLock, NULL);
 
 // Function Prototypes
 void* requestThread(void* args_p);
@@ -67,7 +64,7 @@ void GetUserList(string destUser);
 // pre: none
 // post: none
 
-bool ProcessMessage(RESC::Message msg);
+void ProcessMessage(string rawMsg, string fromUser);
 // Function processess incoming messages.
 // pre: none
 // post: none
@@ -77,7 +74,7 @@ void ProcessSignal(int sig);
 // pre: none
 // post: none
 
-bool ValidateUser(RESC::Message request, RESC::RESCUser &user);
+bool ValidateUser(string request, RESC::User &user);
 // Function checks user request for proper credentials
 // pre: none
 // post: none
@@ -182,26 +179,20 @@ void* requestThread(void* args_p) {
 void ProcessRequest(int requestSock) {
 
 	// Polling structures
-	RESC::RESCUser user;
+	RESC::User user;
 	fd_set requestfd;
 	struct timeval tv;
 	int sockIndex = 0;
 	
 	// Authenticate User
-	RESC::Message authRequest;
-	bool hasValidated;
+	bool hasValidated = true;
 	do {
-		authRequest = RESC::ReadMessage(requestSock);
-		if (authRequest.hdr.msgType == RESC::INVALID_MSG) return;
+		string authRequest = RESC::ReadMessage(requestSock);
 		hasValidated = ValidateUser(authRequest, user);
-		if (!hasValidated) {
-			// Response
-			RESC::Message authResponse = RESC::CreateAuthResponse(0, false);
-			RESC::SendMessage(requestSock, authResponse);
-		}
+		string authResponse = (hasValidated) ? "SUCCESSFUL" : "UNSUCCESSFUL";
+		cout << "User auth'd " << authResponse << endl;
+		RESC::SendMessage(requestSock, authResponse);
 	} while (!hasValidated);
-	RESC::Message authResponse = RESC::CreateAuthResponse(user.id, true);
-	RESC::SendMessage(requestSock, authResponse);
 	
 	// Announce User, Update UserLists
 	
@@ -222,16 +213,20 @@ void ProcessRequest(int requestSock) {
 		FD_SET(requestSock, &requestfd);
 		if (pollSock != 0 && pollSock != -1) {
 			// READ DATA
-			RESC::Message msg = RESC::ReadMessage(requestSock);
-			if (!ProcessMessage(msg)) break;
+			string msg = RESC::ReadMessage(requestSock);
+			if (!RESC::HasQuit(msg)) break;
+			cout << "Message was : " << msg << endl;
+			ProcessMessage(msg, user.username);
 		}
 		
 		// Send Data
 		pthread_mutex_lock(&MsgQueueLock);
-		unordered_map<int, deque<RESC::Message> >::iterator msgIter = MSG_QUEUE.find(user.id);
+		unordered_map<string, deque<RESC::Message> >::iterator msgIter = MSG_QUEUE.find(user.username);
 		if (msgIter != MSG_QUEUE.end()) {
 			while (!(*msgIter).second.empty()) {
-				SendMessage(requestSock, (*msgIter).second.front());
+				RESC::Message tmpMsg =  (*msgIter).second.front();
+				string tmp = tmpMsg.from + " said: " + tmpMsg.msg;
+				RESC::SendMessage(requestSock, tmp);
 				(*msgIter).second.pop_front();
 			}
 		}
@@ -245,11 +240,12 @@ void GetUserList(string destUser) {
 
 
 
-bool ProcessMessage(RESC::Message msg) {
-	if (msg.hdr.msgType == RESC::INVALID_MSG) return false;
+void ProcessMessage(string rawMsg, string userFrom) {
+	RESC::Message msg = RESC::ConvertMessage(rawMsg, userFrom);
+	if (msg.cmd == RESC::INVALID_MSG) return;
 	
-	unordered_map<int, deque<RESC::Message> >::iterator msgIter;
-	switch(msg.hdr.msgType) {
+	unordered_map<string, deque<RESC::Message> >::iterator msgIter;
+	switch(msg.cmd) {
 		case RESC::BROADCAST_MSG:
 			pthread_mutex_lock(&MsgQueueLock);
 				// Add to all the queues
@@ -259,70 +255,60 @@ bool ProcessMessage(RESC::Message msg) {
 					msgIter++;
 				}
 			pthread_mutex_unlock(&MsgQueueLock);
-			return true;
 			break;
 		case RESC::DIRECT_MSG:
 			pthread_mutex_lock(&MsgQueueLock);
 				// Add to all the queues
-				msgIter = MSG_QUEUE.find(msg.hdr.toUserId);
+				msgIter = MSG_QUEUE.find(msg.to);
 				if (msgIter != MSG_QUEUE.end()) {
 					(*msgIter).second.push_back(msg);
 				}
 			pthread_mutex_unlock(&MsgQueueLock);
-			return true;
-			break;
-		case RESC::USERLIST_MSG:
-			return true;
 			break;
 		default:
 			break;
 	}
-	
-	return false;
 }
 
-bool ValidateUser(RESC::Message request, RESC::RESCUser &user)
+bool ValidateUser(string request, RESC::User &user)
 {
 	bool isValidated = false;
 	stringstream ss;
 	string username;
 	string password;
-	
-	if (request.hdr.msgType == RESC::AUTH_MSG) {
-		for (int i = 0; i < request.body.length(); i++) {
-			if (request.body[i] == '|') {
-				// found the divider
-				username = ss.str();
-				ss.str("");
-				ss.clear();
-			} else {
-				ss << request.body[i];
-			}
+
+	cout << "Validating user request: " << request << endl;
+	const char * cMsg = request.c_str();
+	for (int i = 0; i < request.length(); i++) {
+		if (cMsg[i] == '|') {
+			username = ss.str();
+			ss.str("");
+			ss.clear();
 		}
-		password = ss.str();
-		ss.str("");
-		ss.clear();
-		pthread_mutex_lock(&UserRepositoryLock);
-		unordered_map<string, string>::iterator userIter = USER_REPO.find(username);
-		if (userIter != USER_REPO.end()) {
-			if (!password.compare((*userIter).second)) {
-				isValidated = true;
-			}
-		} else {
-			// We do not have this user. Add new user
-			USER_REPO.insert(make_pair<string, string>(username, password));
+		ss << cMsg[i];
+	}
+	password = ss.str();
+	ss.str("");
+	ss.clear();
+	
+	pthread_mutex_lock(&UserListLock);
+	unordered_map<string, RESC::User>::iterator usrIter = USER_LIST.find(username);
+	if (usrIter != USER_LIST.end()) {
+		// found user
+		if (!(*usrIter).second.password.compare(password)) {
 			isValidated = true;
+			user.username = username;
 		}
-		pthread_mutex_unlock(&UserRepositoryLock);
-	}
-	
-	if (isValidated) {
+	} else {
+		// New user, so create them
+		RESC::User newUser;
+		newUser.username = username;
+		newUser.password = password;
 		user.username = username;
-		pthread_mutex_lock(&UserListLock);
-		user.id = USER_LIST.size() + 1;
-		USER_LIST.insert(make_pair<string, int>(user.username, user.id));
-		pthread_mutex_unlock(&UserListLock);
+		USER_LIST.insert(make_pair<string, RESC::User>(username, newUser));
+		isValidated = true;
 	}
+	pthread_mutex_unlock(&UserListLock);
 	
 	return isValidated;
 }
