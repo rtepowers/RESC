@@ -214,8 +214,9 @@ void ProcessRequest(int requestSock) {
 		if (pollSock != 0 && pollSock != -1) {
 			// READ DATA
 			string msg = RESC::ReadMessage(requestSock);
-			if (!RESC::HasQuit(msg)) break;
-			cout << "Message was : " << msg << endl;
+			if (RESC::HasQuit(msg)){
+				break;
+			}
 			ProcessMessage(msg, user.username);
 		}
 		
@@ -225,13 +226,17 @@ void ProcessRequest(int requestSock) {
 		if (msgIter != MSG_QUEUE.end()) {
 			while (!(*msgIter).second.empty()) {
 				RESC::Message tmpMsg =  (*msgIter).second.front();
-				string tmp = tmpMsg.from + " said: " + tmpMsg.msg;
+				string tmp = tmpMsg.from + " said: " + tmpMsg.msg + "\n";
 				RESC::SendMessage(requestSock, tmp);
 				(*msgIter).second.pop_front();
 			}
 		}
 		pthread_mutex_unlock(&MsgQueueLock);
 	}	
+	pthread_mutex_lock(&MsgQueueLock);
+	MSG_QUEUE.erase(user.username);
+	pthread_mutex_unlock(&MsgQueueLock);
+	cout << "Closing socket" << endl;
 }
 
 void GetUserList(string destUser) {
@@ -251,7 +256,9 @@ void ProcessMessage(string rawMsg, string userFrom) {
 				// Add to all the queues
 				msgIter = MSG_QUEUE.begin();
 				while (msgIter != MSG_QUEUE.end()) {
-					(*msgIter).second.push_back(msg);
+					if ((*msgIter).first.compare(userFrom)) {
+						(*msgIter).second.push_back(msg);
+					}
 					msgIter++;
 				}
 			pthread_mutex_unlock(&MsgQueueLock);
@@ -309,6 +316,12 @@ bool ValidateUser(string request, RESC::User &user)
 		isValidated = true;
 	}
 	pthread_mutex_unlock(&UserListLock);
+	
+	if (isValidated) {
+		pthread_mutex_lock(&MsgQueueLock);
+		MSG_QUEUE.insert(make_pair<string, deque<RESC::Message> >(username, deque<RESC::Message>()));
+		pthread_mutex_unlock(&MsgQueueLock);
+	}
 	
 	return isValidated;
 }

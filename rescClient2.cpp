@@ -391,7 +391,7 @@ void ProcessIncomingData(int serverSocket) {
       // Socket has data, let's retrieve it.
       string incMessage = ReadMessage(serverSocket);
 	  // Display Message
-	  DisplayMessage(msg);
+	  DisplayMessage(incMessage);
 	  wrefresh(INPUT_SCREEN);
     }
   }
