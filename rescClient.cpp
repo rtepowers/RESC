@@ -1,25 +1,19 @@
-// AUTHOR: Raymond Powers
-// DATE: October 3, 2014
-// PLATFORM: C++ 
+// AUTHOR: Ray Powers
+// DATE: October 25, 2014
+// FILE: rescClient2.cpp
 
-// DESCRIPTION: Ray's Easily Scaled Chat Client
-//              A simply to use and straight forward terminal app.
+// DESCRIPTION: RescClient2.cpp is a v2 replacement of rescClient.cpp.
+//				This app will improve upon the performance of the previous version.
+//				Will also have greater functionality. (Userlist?)
 
 // Standard Library
 #include<iostream>
 #include<sstream>
 #include<string>
-#include<cstring>
-
-// Network Function
-#include<sys/types.h>
-#include<sys/socket.h>
-#include<sys/select.h>
-#include<sys/time.h>
-#include<netinet/in.h>
-#include<arpa/inet.h>
-#include<unistd.h>
-#include<netdb.h>
+#include<ctime>
+#include<cstdlib>
+#include<unordered_map>
+#include<queue>
 
 // User Interface
 #include<curses.h>
@@ -27,339 +21,268 @@
 // Multithreading
 #include<pthread.h>
 
-// RESC Library
-#include "Common.h"
+// RESC Framework
+#include "rescFramework.h"
 
 using namespace std;
 using namespace RESC;
 
-// GLOBALS
+// Globals
 const int INPUT_LINES = 3;
+const int USER_COLS = 10;
 const char ENTER_SYM = '\n';
 const char BACKSPACE_SYM = '\b';
-const int DELETE_SYM = 127;
-WINDOW *INPUT_SCREEN;
-WINDOW *MSG_SCREEN;
-fd_set hostfd;
-struct timeval tv;
+const int DELETE_SYM = 127; // NOTE: Now symbol for this.
+WINDOW* INPUT_SCREEN;
+WINDOW* MSG_SCREEN;
+WINDOW* USER_SCREEN;
 pthread_mutex_t displayLock;
 int displayStatus = pthread_mutex_init(&displayLock, NULL);
+deque<string> USER_LIST;
+pthread_mutex_t userListLock;
+int userListStatus = pthread_mutex_init(&userListLock, NULL);
 
 // Data Structures
 struct threadArgs {
-  int serverSock;
+	int serverSocket;
 };
 
 // Function Prototypes
-void clearInputScreen();
-// Function resets InputScreen to default state.
-// pre: InputScreen should exist.
-// post: none
-
-bool getUserInput(string& inputStr, bool isPwd);
-// Function tests whether the user has typed a message.
-// pre: InputScreen should exist.
-// post: none
-
-void prepareWindows();
-// Function prepares user interface
+void ClearInputScreen();
+// Function resets INPUT_SCREEN to default state
 // pre: none
 // post: none
 
-void* clientThread(void* args_p);
-// Function serves as the entry point to a new thread.
+void ClearUserScreen();
+// Function resets the USER_SCREEN to default state
 // pre: none
 // post: none
 
-void displayMsg(string& msg);
-// Function displays message
-// pre: ChatScreen should exist.
-// post: none
+bool GetUserInput(string &inputStr, bool shouldProtect);
+// Function checks whether the user has typed a message.
+// pre: inputStr should exist. 
+// post: inputStr will be modified when the return value is true.
 
-void DisplayData (int hostSock);
-// Function loops over polling a socket for data.
+void PrepareWindows();
+// Function prepares the user interface
 // pre: none
 // post: none
 
-bool hasAuthenticated (int hostSock, string &username);
-// Function handles authentication with server.
+void* ServerThread(void* args_p);
+// Function is the entry point for interacting with the server
 // pre: none
 // post: none
 
-int main (int argNum, char* argValues[]) {
+void DisplayMessage(string &msg);
+// Function displays message on screen
+// pre: MSG_SCREEN should exist
+// post: none
 
-  // Locals
-  string inputStr;
-  string hostname;
-  string username = "";
-  unsigned short serverPort;
-  int hostSock;
-  int numberOfSocks;
+void DisplayUserList(string &msg);
+// Function displays the list of Users
+// pre: USER_SCREEN should exist
+// post: none
 
-  // Need to grab Command-line arguments and convert them to useful types
-  // Initialize arguments with proper variables.
-  if (argNum != 3){
-    // Incorrect number of arguments
-    cerr << "Incorrect number of arguments. Please try again." << endl;
-    return -1;
-  }
+void ProcessIncomingData(int serverSocket);
+// Function loops over polling the server socket for data.
+// pre: none
+// post: none
 
-  // Need to store arguments
-  hostname = argValues[1];
-  serverPort = atoi(argValues[2]);
+bool HasAuthenticated (int serverSocket, User &user);
+// Function handles authentication with the server.
+// pre: none
+// post: none
 
-  // Begin User Interface
-  prepareWindows();
+void ProcessMessage(string rawMsg);
+// Function processess incoming messages.
+// pre: none
+// post: none
 
-  // Get a chat server
-  hostSock = openSocket(hostname, serverPort+1);
-  string identifier = "CLIENT";
-  SendInteger(hostSock, identifier.length()+1);
-  SendMessage(hostSock, identifier);
-  long serverNameLength = GetInteger(hostSock);
-  string serverName = GetMessage(hostSock, serverNameLength);
-  close(hostSock);
-  
-  // Connect to Chat Server
-  int serverSock = openSocket(serverName, serverPort);
-  
-  // Login State
-  while (!hasAuthenticated(serverSock, username)) {
-  }
-  string welcomeMsg = "\nWelcome to RESC!\n\n";
-  displayMsg(welcomeMsg);
-  wrefresh(INPUT_SCREEN);
-  
-  // Establish a Thread to handle displaying new messages.
-  struct threadArgs* args_p = new threadArgs;
-  args_p -> serverSock = serverSock;
-  pthread_t tid;
-  int threadStatus = pthread_create(&tid, NULL, clientThread, (void*)args_p);
-  if (threadStatus != 0){
-    // Failed to create child thread
-    cerr << "Failed to create child process." << endl;
-  }//*/
-
-  if (hostSock > 0 ) {
-    // Enter a loop to begin
-    while (true) {
-      // If the user finished typing a message, get it and process it.
-      if (getUserInput(inputStr, false)) {
-		// If it's a command, handle it.
-		if (inputStr == "/quit" || inputStr == "/exit" || inputStr == "/close") {
-		  // TODO: Notify that we're done.
-		  break;
-		}
-		
-		// Display message in chat window
-		string tmp = "You said: ";
-		tmp.append(inputStr);
-		tmp.append("\n");
-		displayMsg(tmp);
-		
-		// Send to Server
-		if (!SendInteger(serverSock, inputStr.length()+1)) {
-		  cerr << "Unable to send Int. " << endl;
-		  break;
-		}
-
-		if (!SendMessage(serverSock, inputStr)) {
-		  cerr << "Unable to send Message. " << endl;
-		  break;
-		}
-		
-		// Clean slate
-		inputStr.clear();
-		clearInputScreen();
-      }
-    }
-	// Send to Server
-	if (!SendInteger(serverSock, inputStr.length()+1)) {
-	  cerr << "Unable to send Int. " << endl;
+int main (int argc, char * argv[])
+{
+	// LOCALS
+	string inputStr;
+	string userName;
+	User user;
+	
+	// Need to grab Command-line arguments and convert them to useful types
+	// Initialize arguments with proper variables.
+	if (argc != 3){
+		// Incorrect number of arguments
+		cerr << "Incorrect number of arguments. Please try again." << endl;
+		return -1;
 	}
-
-	if (!SendMessage(serverSock, inputStr)) {
-	  cerr << "Unable to send Message. " << endl;
+	// Need to store arguments
+	string hostname = argv[1];
+	unsigned short serverPort = atoi(argv[2]);
+	
+	// Begin User Interface
+	PrepareWindows();
+	
+	// Connect To Chat Server (BOOTSTRAP?)
+	int serverSocket = OpenSocket(hostname, serverPort);
+	while (!HasAuthenticated(serverSocket, user)) {
 	}
-  }//*/
+	userName = user.username;
+	
+	// Establish Socket Reader
+	struct threadArgs* args_p = new threadArgs;
+	args_p -> serverSocket = serverSocket;
+	pthread_t tid;
+	int threadStatus = pthread_create(&tid, NULL, ServerThread, (void*)args_p);
+	if (threadStatus != 0) {
+		cerr << "Failed to create child process." << endl;
+		serverSocket = 0;
+	}
+	if (serverSocket > 0) {
+		// Enter Function Loop
+		while (true) {
+			if (GetUserInput(inputStr, false)) {
+				// Process Local Commands
+				if (inputStr == "/quit" || inputStr == "/exit" || inputStr == "/close") {
+					// Notify Server we're done.
+					SendMessage(serverSocket, inputStr);
+					break;
+				}
+			
+				// Provide some feedback to the user.
+				string tmp = "You said: ";
+				tmp.append(inputStr);
+				tmp.append("\n");
+				DisplayMessage(tmp);
+			
+				// Send to Chat Server
+				SendMessage(serverSocket, inputStr);
+				
+				// Clean slate
+				inputStr.clear();
+				ClearInputScreen();
+			}
+		}
+	}
+	
+	// Clean it all up
+	CloseSocket(serverSocket);
+	delwin(INPUT_SCREEN);
+	delwin(USER_SCREEN);
+	delwin(MSG_SCREEN);
+    endwin();
 
-  // Clean up and Close things down.
-  delwin(INPUT_SCREEN);
-  delwin(MSG_SCREEN);
-  endwin();
-  close(hostSock);
-
-  exit(-1);
+	exit(0);
 }
 
-void prepareWindows() {
+void PrepareWindows() {
 
   // Initialize Screen
   initscr();
   start_color();
 
-  // Set timeout of input to 2 miliseconds.
+  // Set timeout of input to 1 miliseconds.
   halfdelay(1);
   //nodelay(INPUT_SCREEN, true);
 
   // Create new MSG_SCREEN window and enable scrolling of text.
   noecho();
   cbreak();
-  MSG_SCREEN = newwin(LINES - INPUT_LINES, COLS, 0, 0);
+  MSG_SCREEN = newwin(LINES - INPUT_LINES, COLS - USER_COLS, 0, 0);
   scrollok(MSG_SCREEN, TRUE);
   wsetscrreg(MSG_SCREEN, 0, LINES - INPUT_LINES - 1);
   wrefresh(MSG_SCREEN);
 
   // SET Colors for window.
-  init_pair(1, COLOR_CYAN, COLOR_BLACK);
+  init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
   wbkgd(MSG_SCREEN, COLOR_PAIR(1));
 
   // Create new INPUT_SCREEN window. No scrolling.
   INPUT_SCREEN = newwin(INPUT_LINES, COLS, LINES - INPUT_LINES, 0);
   
   // Prepare Input Screen.
-  clearInputScreen();
+  ClearInputScreen();
+  
+  USER_SCREEN = newwin(LINES - INPUT_LINES, USER_COLS, 0, COLS - USER_COLS);
+  werase(USER_SCREEN);
+  mvwvline(USER_SCREEN, 0, 0, '|', LINES - INPUT_LINES);
+  wrefresh(USER_SCREEN);
   
 }
 
-void clearInputScreen() {
-
-  // Clear screen and write a division line.
-  werase(INPUT_SCREEN);
-  mvwhline(INPUT_SCREEN, 0, 0, '-', COLS);
-
-  // Move cursor to the start of the next line.
-  wmove(INPUT_SCREEN, 1, 0);
-  waddstr(INPUT_SCREEN, "Input:  ");
-
-  wrefresh(INPUT_SCREEN);
-
+void ClearInputScreen() {
+	// Clear screen and write a division line.
+	werase(INPUT_SCREEN);
+	mvwhline(INPUT_SCREEN, 0,0,'-', COLS);
+	
+	// Move Cursor to start of next line
+	wmove(INPUT_SCREEN, 1, 0);
+	waddstr(INPUT_SCREEN, "Input:  ");
+	
+	wrefresh(INPUT_SCREEN);
 }
 
-int openSocket (string hostName, unsigned short serverPort) {
-
-  // Local variables.
-  struct hostent* host;
-  int status;
-  int bytesRecv;
-
-  // Create a socket and start server communications.
-  int hostSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (hostSock <= 0) {
-    // Socket was unsuccessful.
-    cerr << "Socket was unable to be opened." << endl;
-    return -1;
-  }
-
-  // Get host IP and Set proper fields
-  host = gethostbyname(hostName.c_str());
-  if (!host) {
-    cerr << "Unable to resolve hostname's ip address. Exiting..." << endl;
-    return -1;
-  }
-  char* tmpIP = inet_ntoa( *(struct in_addr *)host->h_addr_list[0]);
-  unsigned long serverIP;
-  status = inet_pton(AF_INET, tmpIP,(void*) &serverIP);
-  if (status <= 0) return -1;
-
-  struct sockaddr_in serverAddress;
-  serverAddress.sin_family = AF_INET;
-  serverAddress.sin_addr.s_addr = serverIP ;
-  serverAddress.sin_port = htons(serverPort);
-
-  // Now that we have the proper information, we can open a connection.
-  status = connect(hostSock, (struct sockaddr *) &serverAddress, sizeof(serverAddress));
-  if (status < 0) {
-    cerr << "Error with the connection." << endl;
-    return -1;
-  }
-
-  return hostSock;
+void ClearUserScreen() {
+	// Clear screen and write a division line.
+	werase(USER_SCREEN);
+	mvwvline(USER_SCREEN, 0, 0, '|', LINES - INPUT_LINES);
+	wrefresh(INPUT_SCREEN);
 }
 
-void* clientThread(void* args_p) {
-  
-  // Local Variables
-  threadArgs* tmp = (threadArgs*) args_p;
-  int hostSock = tmp -> serverSock;
-  delete tmp;
-
-  // Detach Thread to ensure that resources are deallocated on return.
-  pthread_detach(pthread_self());
-
-  // Communicate with Client
-  DisplayData(hostSock);
-
-  // Close Client socket
-  close(hostSock);
-
-  // Quit thread
-  pthread_exit(NULL);
-}
-
-void DisplayData (int hostSock) {
+bool HasAuthenticated (int serverSocket, User &user) {
 
   // Locals
-  bool canRead = true;
-  fd_set hostfd;
-  struct timeval tv;
-
-  // Clear FD_Set and set timeout.
-  FD_ZERO(&hostfd);
-  tv.tv_sec = 1;
-  tv.tv_usec = 10000;
-
-  // Initialize Data
-  FD_SET(hostSock, &hostfd);
-  int numberOfSocks = hostSock + 1;
-
-  while (canRead) {
-    // Read Data
-    int pollSock = select(numberOfSocks, &hostfd, NULL, NULL, &tv);
-    tv.tv_sec = 1;
-    tv.tv_usec = 10000;
-    FD_SET(hostSock, &hostfd);
-    if (pollSock != 0 && pollSock != -1) {
-      long msgLength = GetInteger(hostSock);
-      if (msgLength <= 0) {
-		cerr << "Couldn't get integer from Server." << endl;
-		break;
-      }
-      string clientMsg = GetMessage(hostSock, msgLength);
-      if (clientMsg == "") {
-		cerr << "Couldn't get message from Server." << endl;
-		break;
-      }
-      displayMsg(clientMsg);
-      wrefresh(INPUT_SCREEN);
-    }
+  stringstream ss;
+  for (short i =0; i < COLS - USER_COLS; i++) {
+  	ss << "/";
   }
-}
+  string loginMsg = ss.str() + "\nWelcome to RESC!\n\nPlease login.\n\n";
+  ss.str("");
+  ss.clear();
+  string clearScr = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
+  string pwdMsg = "/\b\nPlease enter your password.\n";
+  string userName;
+  string userPwd;
 
-void displayMsg(string &msg) {
-  pthread_mutex_lock(&displayLock);
-  // Add Msg to screen.
-  if (msg.c_str()[0] == '/') {
-    string blank = "\n";
-    waddstr(MSG_SCREEN, blank.c_str());
-    init_pair(2, COLOR_MAGENTA, COLOR_BLACK);
-    wbkgd(MSG_SCREEN, COLOR_PAIR(2));
-    
-  } else {
-    // SET Colors for window.
-    init_pair(1, COLOR_CYAN, COLOR_BLACK);
-    wbkgd(MSG_SCREEN, COLOR_PAIR(1));
+  // Reset Screen
+  DisplayMessage(clearScr);
+  wrefresh(INPUT_SCREEN);
+  ClearInputScreen();
+
+  // Get UserName
+  DisplayMessage(loginMsg);
+  wrefresh(INPUT_SCREEN);
+  while (!GetUserInput(userName, false)) {
   }
-  waddstr(MSG_SCREEN, msg.c_str());
-  //waddch(MSG_SCREEN, '\n');
+  ClearInputScreen();
   
-  // Show new screen.
-  wrefresh(MSG_SCREEN);
-  pthread_mutex_unlock(&displayLock);
+  // Get Password
+  DisplayMessage(pwdMsg);
+  wrefresh(INPUT_SCREEN);
+  while (!GetUserInput(userPwd, true)) {
+  }
+  ClearInputScreen();
 
+  // Reset Screen
+  DisplayMessage(clearScr);
+  wrefresh(INPUT_SCREEN);
+  ClearInputScreen();
+  
+  // Process
+  ss << userName << "|" << userPwd;
+  string bodyMsg = ss.str();
+  ss.str("");
+  ss.clear();
+  SendMessage(serverSocket, bodyMsg);
+  string authResponse = ReadMessage(serverSocket);
+
+  // Evaluate Host Response
+  if (CheckAuthResponse(authResponse)) {
+    // Login Sucessful!
+    user.username = userName;
+    return true;
+  }
+  // Login Failed
+  return false;
 }
 
-bool getUserInput(string& inputStr, bool isPwd) {
+bool GetUserInput(string &inputStr, bool shouldProtect) {
 
   // Locals
   bool success = false;
@@ -375,7 +298,7 @@ bool getUserInput(string& inputStr, bool isPwd) {
   // Can we display the text? Add to inputStr if yes.
   if (isprint(userText)) {
     inputStr += (char)userText;
-    if (!isPwd) {
+    if (!shouldProtect) {
       waddch(INPUT_SCREEN, userText);
     } else {
       char COVER = '*';
@@ -408,51 +331,93 @@ bool getUserInput(string& inputStr, bool isPwd) {
   return success;
 }
 
-bool hasAuthenticated (int hostSock, string &username) {
+void DisplayMessage(string &msg) {
+  pthread_mutex_lock(&displayLock);
+  // Add Msg to screen.
+  // SET Colors for window.
+  init_pair(1, COLOR_CYAN, COLOR_BLACK);
+  wbkgd(MSG_SCREEN, COLOR_PAIR(1));
+  waddstr(MSG_SCREEN, msg.c_str());
+  
+  // Show new screen.
+  wrefresh(MSG_SCREEN);
+  pthread_mutex_unlock(&displayLock);
+
+}
+
+void DisplayUserList(string &msg) {
+	pthread_mutex_lock(&displayLock);
+ 	init_pair(2, COLOR_MAGENTA, COLOR_BLACK);
+	wbkgd(USER_SCREEN, COLOR_PAIR(2));
+	waddstr(USER_SCREEN, msg.c_str());
+	
+	// Show screen
+	wrefresh(USER_SCREEN);
+	pthread_mutex_unlock(&displayLock);
+}
+
+void* ServerThread(void* args_p) {
+  
+  // Local Variables
+  threadArgs* tmp = (threadArgs*) args_p;
+  int hostSock = tmp -> serverSocket;
+  delete tmp;
+
+  // Detach Thread to ensure that resources are deallocated on return.
+  pthread_detach(pthread_self());
+
+  // Communicate with Client
+  ProcessIncomingData(hostSock);
+
+  // Close Client socket
+  close(hostSock);
+
+  // Quit thread
+  pthread_exit(NULL);
+}
+
+void ProcessIncomingData(int serverSocket) {
 
   // Locals
-  string loginMsg = "////////////////////////////////////////////////////////\nPlease enter your username.\nThe system will create a new account if your username could not be found.\n";
-  string clearScr = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
-  string userName;
-  long responseLen = 0;
-  string hostResponse;
+  bool canRead = true;
+  fd_set hostfd;
+  struct timeval tv;
 
-  // Reset Screen
-  displayMsg(clearScr);
-  wrefresh(INPUT_SCREEN);
-  clearInputScreen();
+  // Clear FD_Set and set timeout.
+  FD_ZERO(&hostfd);
+  tv.tv_sec = 1;
+  tv.tv_usec = 10000;
 
-  // Get UserName
-  displayMsg(loginMsg);
-  wrefresh(INPUT_SCREEN);
-  while (!getUserInput(userName, false)) {
+  // Initialize Data
+  FD_SET(serverSocket, &hostfd);
+  int numberOfSocks = serverSocket + 1;
+
+  while (canRead) {
+    // Read Data
+    int pollSock = select(numberOfSocks, &hostfd, NULL, NULL, &tv);
+    tv.tv_sec = 1;
+    tv.tv_usec = 10000;
+    FD_SET(serverSocket, &hostfd);
+    if (pollSock != 0 && pollSock != -1) {
+      // Socket has data, let's retrieve it.
+      string incMessage = ReadMessage(serverSocket);
+	  // Display Message
+	  ProcessMessage(incMessage);
+	  //DisplayMessage(incMessage);
+	  wrefresh(INPUT_SCREEN);
+    }
   }
-  clearInputScreen();
+}
 
-  // Reset Screen
-  displayMsg(clearScr);
-  wrefresh(INPUT_SCREEN);
-  clearInputScreen();
-  
-  // Send Data
-  SendInteger(hostSock, userName.length()+1);
-  SendMessage(hostSock, userName);
-  //SendInteger(hostSock, userPwd.length()+1);
-  //SendMessage(hostSock, userPwd);
-
-  // Receive Data
-  responseLen = GetInteger(hostSock);
-  hostResponse = GetMessage(hostSock, responseLen);
-
-  // Evaluate Host Response
-  if (hostResponse == "Login Successful!\n") {
-    // Login Sucessful!
-    username = userName;
-    return true;
-  } else {
-    // Login Failed
-    return false;
-    
-  }
-
+void ProcessMessage(string rawMsg) {
+	RESC::Message msg = RESC::ConvertServerMessage(rawMsg);
+	switch(msg.cmd) {
+		case USER_LIST_MSG:
+			ClearUserScreen();
+			DisplayUserList(msg.msg);
+			break;
+		default:
+			DisplayMessage(rawMsg);
+			break;
+	}
 }
