@@ -53,6 +53,11 @@ void ClearInputScreen();
 // pre: none
 // post: none
 
+void ClearUserScreen();
+// Function resets the USER_SCREEN to default state
+// pre: none
+// post: none
+
 bool GetUserInput(string &inputStr, bool shouldProtect);
 // Function checks whether the user has typed a message.
 // pre: inputStr should exist. 
@@ -73,7 +78,7 @@ void DisplayMessage(string &msg);
 // pre: MSG_SCREEN should exist
 // post: none
 
-void DisplayUserList();
+void DisplayUserList(string &msg);
 // Function displays the list of Users
 // pre: USER_SCREEN should exist
 // post: none
@@ -85,6 +90,11 @@ void ProcessIncomingData(int serverSocket);
 
 bool HasAuthenticated (int serverSocket, User &user);
 // Function handles authentication with the server.
+// pre: none
+// post: none
+
+void ProcessMessage(string rawMsg);
+// Function processess incoming messages.
 // pre: none
 // post: none
 
@@ -208,6 +218,13 @@ void ClearInputScreen() {
 	wrefresh(INPUT_SCREEN);
 }
 
+void ClearUserScreen() {
+	// Clear screen and write a division line.
+	werase(USER_SCREEN);
+	mvwvline(USER_SCREEN, 0, 0, '|', LINES - INPUT_LINES);
+	wrefresh(INPUT_SCREEN);
+}
+
 bool HasAuthenticated (int serverSocket, User &user) {
 
   // Locals
@@ -328,21 +345,15 @@ void DisplayMessage(string &msg) {
 
 }
 
-void DisplayUserList() {
-	stringstream ss;
-	pthread_mutex_lock(&userListLock);
-	for (int i = 0; i < USER_LIST.size(); i++) {
-		ss << "| " << USER_LIST[i] << endl;
-	}
-	
-	string tmp = ss.str();
- 	init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
-	wbkgd(MSG_SCREEN, COLOR_PAIR(1));
-	waddstr(USER_SCREEN, tmp.c_str());
+void DisplayUserList(string &msg) {
+	pthread_mutex_lock(&displayLock);
+ 	init_pair(2, COLOR_MAGENTA, COLOR_BLACK);
+	wbkgd(USER_SCREEN, COLOR_PAIR(2));
+	waddstr(USER_SCREEN, msg.c_str());
 	
 	// Show screen
 	wrefresh(USER_SCREEN);
-	pthread_mutex_unlock(&userListLock);
+	pthread_mutex_unlock(&displayLock);
 }
 
 void* ServerThread(void* args_p) {
@@ -391,8 +402,22 @@ void ProcessIncomingData(int serverSocket) {
       // Socket has data, let's retrieve it.
       string incMessage = ReadMessage(serverSocket);
 	  // Display Message
-	  DisplayMessage(incMessage);
+	  ProcessMessage(incMessage);
+	  //DisplayMessage(incMessage);
 	  wrefresh(INPUT_SCREEN);
     }
   }
+}
+
+void ProcessMessage(string rawMsg) {
+	RESC::Message msg = RESC::ConvertServerMessage(rawMsg);
+	switch(msg.cmd) {
+		case USER_LIST_MSG:
+			ClearUserScreen();
+			DisplayUserList(msg.msg);
+			break;
+		default:
+			DisplayMessage(rawMsg);
+			break;
+	}
 }

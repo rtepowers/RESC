@@ -30,7 +30,9 @@ namespace RESC {
 enum MsgType {
 	INVALID_MSG = 0,
 	DIRECT_MSG,
-	BROADCAST_MSG
+	BROADCAST_MSG,
+	FILE_STREAM_MSG,
+	USER_LIST_MSG
 };
 
 struct Message {
@@ -129,6 +131,60 @@ Message ConvertMessage(string msg, string from)
 	} else {
 		newMsg.cmd = BROADCAST_MSG;
 		newMsg.msg = msg;
+	}
+	
+	return newMsg;
+}
+
+Message ConvertServerMessage(string rawMsg)
+{
+	// Turn
+	// "/msg userX blahblahblah"
+	// into
+	// ("blahblahblah", "userX", "", DIRECT_MSG)
+	Message newMsg;
+	newMsg.msg = "";
+	newMsg.to = "";
+	newMsg.from = "SERVER";
+	newMsg.cmd = INVALID_MSG;
+	string cmdName = "";
+	
+	const char * cMsg = rawMsg.c_str();
+	if (cMsg[0] == '/') {
+		// Message was a command
+		int cmdSize = 0;
+		for (int i = 1; i < rawMsg.length(); i++) {
+			if (cMsg[i] == ' ') {
+				cmdSize = i;
+				break;
+			}
+		}
+		if (cmdSize == 0) {
+			// Direct Command (ie. No Args)
+			cmdSize = rawMsg.length();
+		}
+		// Build Command type
+		stringstream ss;
+		for (int i = 0; i < cmdSize; i++) {
+			ss << cMsg[i];
+		}
+		cmdName.append(ss.str());
+		ss.str("");
+		ss.clear();
+		
+		// Now to interpret arg-based commands.
+		if (cmdName == "/userlist") {
+			for (int i = cmdSize+1; i < rawMsg.length();i++) {
+				ss << cMsg[i];
+			}
+			newMsg.msg.append(ss.str());
+			newMsg.cmd = USER_LIST_MSG;
+			ss.str("");
+			ss.clear();
+		}
+	} else {
+		newMsg.cmd = BROADCAST_MSG;
+		newMsg.msg = rawMsg;
 	}
 	
 	return newMsg;

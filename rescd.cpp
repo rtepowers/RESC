@@ -59,8 +59,8 @@ void ProcessRequest(int requestSock);
 // pre: none
 // post: none
 
-void GetUserList(string destUser);
-// Function Grabs list of users online
+void UpdateUserLists();
+// Function sends all users an updated userlist
 // pre: none
 // post: none
 
@@ -193,6 +193,7 @@ void ProcessRequest(int requestSock) {
 		cout << "User auth'd " << authResponse << endl;
 		RESC::SendMessage(requestSock, authResponse);
 	} while (!hasValidated);
+	UpdateUserLists();
 	
 	// Announce User, Update UserLists
 	
@@ -226,8 +227,12 @@ void ProcessRequest(int requestSock) {
 		if (msgIter != MSG_QUEUE.end()) {
 			while (!(*msgIter).second.empty()) {
 				RESC::Message tmpMsg =  (*msgIter).second.front();
-				string tmp = tmpMsg.from + " said: " + tmpMsg.msg + "\n";
-				RESC::SendMessage(requestSock, tmp);
+				if (tmpMsg.cmd != RESC::USER_LIST_MSG) {
+					string tmp = tmpMsg.from + " said: " + tmpMsg.msg + "\n";
+					RESC::SendMessage(requestSock, tmp);
+				} else {
+					RESC::SendMessage(requestSock,tmpMsg.msg);
+				}
 				(*msgIter).second.pop_front();
 			}
 		}
@@ -236,14 +241,52 @@ void ProcessRequest(int requestSock) {
 	pthread_mutex_lock(&MsgQueueLock);
 	MSG_QUEUE.erase(user.username);
 	pthread_mutex_unlock(&MsgQueueLock);
+	pthread_mutex_lock(&UserListLock);
+		unordered_map<string, RESC::User>::iterator usrIter = USER_LIST.find(user.username);
+		if (usrIter != USER_LIST.end()) {
+			// found user
+			user.isConnected = false;
+			(*usrIter).second.isConnected = false;
+		}
+	pthread_mutex_unlock(&UserListLock);
+	UpdateUserLists();
 	cout << "Closing socket" << endl;
 }
 
-void GetUserList(string destUser) {
-
+void UpdateUserLists() {
+	stringstream ss;
+	pthread_mutex_lock(&UserListLock);
+		int count = 0;
+		unordered_map<string, RESC::User>::iterator usrIter = USER_LIST.begin();
+		while (usrIter != USER_LIST.end()) {
+			if ((*usrIter).second.isConnected) {	
+				if (count < 20) {		
+					ss << "| " << (*usrIter).first << endl;
+				}
+				count++;
+			}
+			usrIter++;
+		}
+		ss << "| " << "-----" << endl;
+		ss << "| " << count << " Users" << endl;
+	pthread_mutex_unlock(&UserListLock);
+	
+	RESC::Message usrListMsg;
+	usrListMsg.from = "SERVER";
+	usrListMsg.cmd = RESC::USER_LIST_MSG;
+	usrListMsg.msg = "/userlist " + ss.str();
+	ss.str("");
+	ss.clear();
+	unordered_map<string, deque<RESC::Message> >::iterator msgIter;
+	pthread_mutex_lock(&MsgQueueLock);
+	// Add to all the queues
+	msgIter = MSG_QUEUE.begin();
+	while (msgIter != MSG_QUEUE.end()) {
+		(*msgIter).second.push_back(usrListMsg);
+		msgIter++;
+	}
+	pthread_mutex_unlock(&MsgQueueLock);
 }
-
-
 
 void ProcessMessage(string rawMsg, string userFrom) {
 	RESC::Message msg = RESC::ConvertMessage(rawMsg, userFrom);
@@ -305,13 +348,17 @@ bool ValidateUser(string request, RESC::User &user)
 		if (!(*usrIter).second.password.compare(password)) {
 			isValidated = true;
 			user.username = username;
+			user.isConnected = true;
+			(*usrIter).second.isConnected = true;
 		}
 	} else {
 		// New user, so create them
 		RESC::User newUser;
 		newUser.username = username;
 		newUser.password = password;
+		newUser.isConnected = true;
 		user.username = username;
+		user.isConnected = true;
 		USER_LIST.insert(make_pair<string, RESC::User>(username, newUser));
 		isValidated = true;
 	}
