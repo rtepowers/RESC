@@ -1,8 +1,8 @@
 // AUTHOR: Ray Powers
 // DATE: October 25, 2014
-// FILE: rescClient2.cpp
+// FILE: rescClient.cpp
 
-// DESCRIPTION: RescClient2.cpp is a v2 replacement of rescClient.cpp.
+// DESCRIPTION: This is a v2 replacement of rescClient.cpp.
 //				This app will improve upon the performance of the previous version.
 //				Will also have greater functionality. (Userlist?)
 
@@ -29,7 +29,7 @@ using namespace RESC;
 
 // Globals
 const int INPUT_LINES = 3;
-const int USER_COLS = 10;
+const int USER_COLS = 17;
 const char ENTER_SYM = '\n';
 const char BACKSPACE_SYM = '\b';
 const int DELETE_SYM = 127; // NOTE: Now symbol for this.
@@ -415,6 +415,9 @@ void ProcessMessage(string rawMsg) {
 		case USER_LIST_MSG:
 			ClearUserScreen();
 			DisplayUserList(msg.msg);
+			break;
+		case FILE_STREAM_MSG:
+			// Gonna have to figure out where to save these things.
 			break;
 		default:
 			DisplayMessage(rawMsg);

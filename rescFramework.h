@@ -100,7 +100,7 @@ Message ConvertMessage(string msg, string from)
 		ss.clear();
 		
 		// Now to interpret arg-based commands.
-		if (cmdName == "/msg") {
+		if (cmdName == "/msg" || cmdName == "/filestream") {
 			int userSize = 0;
 			for (int i = cmdSize+1; i < msg.length(); i++) {
 				if (cMsg[i] == ' ') {

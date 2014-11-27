@@ -1,8 +1,8 @@
 // AUTHOR: Ray Powers
 // DATE: October 25, 2014
-// FILE: RESCD - Daemon tool for the RESC system.
+// FILE: RESCServer - Daemon tool for the RESC system.
 
-// DESCRIPTION: RESCD will be v2 of the rescTracker. This v2 will improve throughput
+// DESCRIPTION: RESCServer will be v2 of the rescTracker. This v2 will improve throughput
 // 				with a low latency design with SOA. 
 
 // Standard Library
@@ -199,8 +199,8 @@ void ProcessRequest(int requestSock) {
 	
 	// Clear FD_Set and set timeout.
 	FD_ZERO(&requestfd);
-	tv.tv_sec = 2;
-	tv.tv_usec = 100000;
+	tv.tv_sec = 1;
+	tv.tv_usec = 20000;
 
 	// Initialize Data
 	FD_SET(requestSock, &requestfd);
@@ -210,7 +210,7 @@ void ProcessRequest(int requestSock) {
 		// Read Data
 		int pollSock = select(sockIndex, &requestfd, NULL, NULL, &tv);
 		tv.tv_sec = 1;
-		tv.tv_usec = 100000;
+		tv.tv_usec = 20000;
 		FD_SET(requestSock, &requestfd);
 		if (pollSock != 0 && pollSock != -1) {
 			// READ DATA
@@ -307,6 +307,15 @@ void ProcessMessage(string rawMsg, string userFrom) {
 			pthread_mutex_unlock(&MsgQueueLock);
 			break;
 		case RESC::DIRECT_MSG:
+			pthread_mutex_lock(&MsgQueueLock);
+				// Add to all the queues
+				msgIter = MSG_QUEUE.find(msg.to);
+				if (msgIter != MSG_QUEUE.end()) {
+					(*msgIter).second.push_back(msg);
+				}
+			pthread_mutex_unlock(&MsgQueueLock);
+			break;
+		case RESC::FILE_STREAM_MSG:
 			pthread_mutex_lock(&MsgQueueLock);
 				// Add to all the queues
 				msgIter = MSG_QUEUE.find(msg.to);
