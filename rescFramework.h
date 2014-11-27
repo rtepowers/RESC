@@ -100,7 +100,7 @@ Message ConvertMessage(string msg, string from)
 		ss.clear();
 		
 		// Now to interpret arg-based commands.
-		if (cmdName == "/msg" || cmdName == "/filestream") {
+		if (cmdName == "/msg") {
 			int userSize = 0;
 			for (int i = cmdSize+1; i < msg.length(); i++) {
 				if (cMsg[i] == ' ') {
@@ -125,6 +125,14 @@ Message ConvertMessage(string msg, string from)
 				ss << cMsg[i];
 			}
 			newMsg.msg.append(ss.str());
+			ss.str("");
+			ss.clear();
+		} else if (cmdName == "/filestream") {
+			for (int i = 0; i < msg.length();i++) {
+				ss << cMsg[i];
+			}
+			newMsg.msg.append(ss.str());
+			newMsg.cmd = FILE_STREAM_MSG;
 			ss.str("");
 			ss.clear();
 		}
@@ -179,6 +187,14 @@ Message ConvertServerMessage(string rawMsg)
 			}
 			newMsg.msg.append(ss.str());
 			newMsg.cmd = USER_LIST_MSG;
+			ss.str("");
+			ss.clear();
+		} else if (cmdName == "/filestream") {
+			for (int i = cmdSize+1; i < rawMsg.length();i++) {
+				ss << cMsg[i];
+			}
+			newMsg.msg.append(ss.str());
+			newMsg.cmd = FILE_STREAM_MSG;
 			ss.str("");
 			ss.clear();
 		}

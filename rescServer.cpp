@@ -227,11 +227,12 @@ void ProcessRequest(int requestSock) {
 		if (msgIter != MSG_QUEUE.end()) {
 			while (!(*msgIter).second.empty()) {
 				RESC::Message tmpMsg =  (*msgIter).second.front();
-				if (tmpMsg.cmd != RESC::USER_LIST_MSG) {
+				RESC::Message processMsg = RESC::ConvertServerMessage(tmpMsg.msg);
+				if (processMsg.cmd != RESC::USER_LIST_MSG && processMsg.cmd != RESC::FILE_STREAM_MSG) {
 					string tmp = tmpMsg.from + " said: " + tmpMsg.msg + "\n";
 					RESC::SendMessage(requestSock, tmp);
 				} else {
-					RESC::SendMessage(requestSock,tmpMsg.msg);
+					RESC::SendMessage(requestSock, tmpMsg.msg);
 				}
 				(*msgIter).second.pop_front();
 			}
@@ -318,9 +319,12 @@ void ProcessMessage(string rawMsg, string userFrom) {
 		case RESC::FILE_STREAM_MSG:
 			pthread_mutex_lock(&MsgQueueLock);
 				// Add to all the queues
-				msgIter = MSG_QUEUE.find(msg.to);
-				if (msgIter != MSG_QUEUE.end()) {
-					(*msgIter).second.push_back(msg);
+				msgIter = MSG_QUEUE.begin();
+				while (msgIter != MSG_QUEUE.end()) {
+					if ((*msgIter).first.compare(userFrom)) {
+						(*msgIter).second.push_back(msg);
+					}
+					msgIter++;
 				}
 			pthread_mutex_unlock(&MsgQueueLock);
 			break;

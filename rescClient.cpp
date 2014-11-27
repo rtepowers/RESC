@@ -411,6 +411,7 @@ void ProcessIncomingData(int serverSocket) {
 
 void ProcessMessage(string rawMsg) {
 	RESC::Message msg = RESC::ConvertServerMessage(rawMsg);
+	string DEBUG = "Has Received FileStream.\n";
 	switch(msg.cmd) {
 		case USER_LIST_MSG:
 			ClearUserScreen();
@@ -418,6 +419,7 @@ void ProcessMessage(string rawMsg) {
 			break;
 		case FILE_STREAM_MSG:
 			// Gonna have to figure out where to save these things.
+			DisplayMessage(DEBUG);
 			break;
 		default:
 			DisplayMessage(rawMsg);

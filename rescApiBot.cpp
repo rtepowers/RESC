@@ -58,7 +58,7 @@ int main (int argc, char * argv[]) {
 
 	// Need to grab Command-line arguments and convert them to useful types
 	// Initialize arguments with proper variables.
-	if (argc != 4){
+	if (argc != 5){
 		// Incorrect number of arguments
 		cerr << "Incorrect number of arguments. Please try again." << endl;
 		return -1;
@@ -91,42 +91,25 @@ int main (int argc, char * argv[]) {
 			cerr << "Failed to create child process." << endl;
 			serverSocket = 0;
 		}
-		
+
+		// Build command.
+		string sysCommand = "curl " + string(argv[4]) + " > output.txt";
 		while (true) {
 			// Do work section
 			// Grab url
-			int status = system("curl https://api.twitch.tv/kraken/streams > output.txt");
+			sleep(5);
+			int status = system(sysCommand.c_str());
 		
 			// Do work
-			cout << "Working" << endl;
 			sleep(5);
 			// Read File
-			string filename = "output.txt";
-			stringstream ss;
-			string result = "";
-			ifstream srcFile;
-			cout << "Opening file" << endl;
-			srcFile.open(filename.c_str());
-			if (srcFile.fail()) {
-				cout << "Error reading output file" << endl;
-				//exit(-1);
-			}
-			if (srcFile.is_open()) {
-				string tmp = "";
-				while (srcFile >> tmp) {
-					// check anything?
-					ss << tmp;
-				}
-			}
-			srcFile.close();
-			srcFile.clear();
+
 		
 			// Send Message
 			result = ss.str();
-			result = "/msg ray /filestream " + result;
-			cout << "Sending message." << result.length() << " bytes." << endl;
+			result = "/filestream " + result;
 			SendMessage(serverSocket, result);
-			cout << "Sent message" << endl;
+			cout << "Sent message." << endl;
 		}
 	}
 	
@@ -137,7 +120,24 @@ int main (int argc, char * argv[]) {
 
 string ReadFile(string filename)
 {
-	return "";
+	string filename = "output.txt";
+	stringstream ss;
+	string result = "";
+	ifstream srcFile;
+	srcFile.open(filename.c_str());
+	if (srcFile.fail()) {
+		cout << "Error reading output file" << endl;
+		//exit(-1);
+	}
+	if (srcFile.is_open()) {
+		string tmp = "";
+		while (srcFile >> tmp) {
+			// check anything?
+			ss << tmp;
+		}
+	}
+	srcFile.close();
+	srcFile.clear();
 }
 
 void ProcessServerMessages(int serverSocket)
@@ -166,7 +166,7 @@ void ProcessServerMessages(int serverSocket)
       // Socket has data, let's retrieve it.
       string incMessage = ReadMessage(serverSocket);
 	  // Display Message
-	  cout << incMessage << endl;
+	  //cout << incMessage << endl;
     }
   }
 }
