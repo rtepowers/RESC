@@ -101,9 +101,9 @@ int main (int argc, char * argv[]) {
 		string tmpFile = "outputRecent.txt";
 		tmp.str("");
 		tmp.clear();
-		int status = system(string("date +\"%F %H:%M:%S :\" >> " + tmpFile).c_str());
-		string sysCommandPrep = "date +\"%n%F %H:%M:%S :\" >> " + tmpFile;
-		string sysCommand = "curl " + string(argv[4]) + " >> " + tmpFile;
+		int status = system(string("date +\"%F %H:%M:%S :\" > " + tmpFile).c_str());
+		string sysCommandPrep = "date +\"%n%F %H:%M:%S :\" > " + tmpFile;
+		string sysCommand = "curl " + string(argv[4]) + " > " + tmpFile;
 		string sysCommandLog = "cat " + tmpFile + " >> " + filename;
 		while (true) {
 			// Do work section
