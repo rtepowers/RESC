@@ -35,4 +35,7 @@ rescd
 rescClient2
 rescNode
 rescAuth
+rescApiBot
+output*
+.DS_Store
 
