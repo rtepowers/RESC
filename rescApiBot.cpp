@@ -14,6 +14,7 @@
 #include<sstream>
 #include<deque>
 #include<csignal>
+#include<ctime>
 
 // Multithreading
 #include<pthread.h>
@@ -93,23 +94,34 @@ int main (int argc, char * argv[]) {
 		}
 
 		// Build command.
-		string sysCommand = "curl " + string(argv[4]) + " > output.txt";
+		time_t currentTime = time(NULL);
+		stringstream tmp;
+		tmp << currentTime;
+		string filename = "output" + tmp.str() + ".txt";
+		string tmpFile = "outputRecent.txt";
+		tmp.str("");
+		tmp.clear();
+		int status = system(string("date +\"%F %H:%M:%S :\" >> " + tmpFile).c_str());
+		string sysCommandPrep = "date +\"%n%F %H:%M:%S :\" >> " + tmpFile;
+		string sysCommand = "curl " + string(argv[4]) + " >> " + tmpFile;
+		string sysCommandLog = "cat " + tmpFile + " >> " + filename;
 		while (true) {
 			// Do work section
 			// Grab url
 			sleep(5);
-			int status = system(sysCommand.c_str());
+			status = system(sysCommand.c_str());
+			status = system(sysCommandPrep.c_str());
+			status = system(sysCommandLog.c_str());
 		
 			// Do work
 			sleep(5);
 			// Read File
-
+			string data = ReadFile(tmpFile);
 		
 			// Send Message
-			result = ss.str();
-			result = "/filestream " + result;
-			SendMessage(serverSocket, result);
-			cout << "Sent message." << endl;
+ 			data = "/filestream " + data;
+ 			SendMessage(serverSocket, data);
+ 			cout << "Sent message." << endl;
 		}
 	}
 	
@@ -120,7 +132,6 @@ int main (int argc, char * argv[]) {
 
 string ReadFile(string filename)
 {
-	string filename = "output.txt";
 	stringstream ss;
 	string result = "";
 	ifstream srcFile;
@@ -138,6 +149,8 @@ string ReadFile(string filename)
 	}
 	srcFile.close();
 	srcFile.clear();
+	
+	return ss.str();
 }
 
 void ProcessServerMessages(int serverSocket)
