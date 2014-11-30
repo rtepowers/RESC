@@ -41,7 +41,7 @@ Running the API Bot (Runs GET requests only)
 ### Protocol:
 
 RESC follows two simple patterns for sending messages.  
-1. */all (message)*    : Send a message to all connected users. Default message type and will assume this type if not specified.
 
+1. */all (message)*    : Send a message to all connected users. Default message type and will assume this type if not specified.  
 2. */msg (username) (message)*     : Send a message to a specific user
 
