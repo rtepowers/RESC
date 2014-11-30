@@ -191,14 +191,6 @@ Message ConvertServerMessage(string rawMsg)
 			ss.str("");
 			ss.clear();
 		} else if (cmdName == "/filestream") {
-// 			for (int i = cmdSize+1; i < rawMsg.length();i++) {
-// 				ss << cMsg[i];
-// 			}
-// 			newMsg.msg.append(ss.str());
-// 			newMsg.cmd = FILE_STREAM_MSG;
-// 			ss.str("");
-// 			ss.clear();
-			
 			int userSize = 0;
 			for (int i = cmdSize+1; i < rawMsg.length(); i++) {
 				if (cMsg[i] == ' ') {

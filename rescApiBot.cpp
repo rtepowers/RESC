@@ -28,6 +28,9 @@ using namespace RESC;
 
 // GLOBALS
 int serverSocket;
+deque<string> USER_LIST;
+pthread_mutex_t userListLock;
+int userListStatus = pthread_mutex_init(&userListLock, NULL);
 
 // Data Structures
 struct threadArgs {
@@ -42,6 +45,11 @@ string ReadFile(string filename);
 
 void ProcessServerMessages(int serverSocket);
 // Function handles incoming messages from server
+// pre: none
+// post: none
+
+void ProcessClientRequest(string msg);
+// Function handles client request
 // pre: none
 // post: none
 
@@ -110,20 +118,33 @@ int main (int argc, char * argv[]) {
 			// Do work section
 			// Grab url
 			sleep(5);
-			int status = system(sysCommandPrep.c_str());
-			status = system(sysCommand.c_str());
-			status = system(sysCommandLog.c_str());
-			status = system(sysCommandNewLine.c_str());
+			int numOfUsers;
+			pthread_mutex_lock(&userListLock);
+			numOfUsers = USER_LIST.size();
+			pthread_mutex_unlock(&userListLock);
+			if (numOfUsers) {
+				int status = system(sysCommandPrep.c_str());
+				status = system(sysCommand.c_str());
+				status = system(sysCommandLog.c_str());
+				status = system(sysCommandNewLine.c_str());
 		
-			// Do work
-			sleep(5);
-			// Read File
-			string data = ReadFile(tmpFile);
+				// Do work
+				sleep(5);
+				// Read File
+				string data = ReadFile(tmpFile);
 		
-			// Send Message
- 			data = "/msg ray /filestream "+ username + " " + data;
- 			SendMessage(serverSocket, data);
- 			cout << "Sent message." << endl;
+				// Send Message
+				data = " /filestream "+ username + " " + data;
+				pthread_mutex_lock(&userListLock);
+				deque<string>::iterator userIter = USER_LIST.begin();
+				while (userIter != USER_LIST.end()) {
+					string msgToSend = "/msg " + *userIter + data;
+					SendMessage(serverSocket, msgToSend);
+					userIter++;
+				}
+				pthread_mutex_unlock(&userListLock);
+				cout << "Sent Messages to server." << endl;
+ 			}
 		}
 	}
 	
@@ -178,12 +199,54 @@ void ProcessServerMessages(int serverSocket)
     tv.tv_usec = 10000;
     FD_SET(serverSocket, &hostfd);
     if (pollSock != 0 && pollSock != -1) {
-      // Socket has data, let's retrieve it.
-      string incMessage = ReadMessage(serverSocket);
-	  // Display Message
-	  //cout << incMessage << endl;
+		// Socket has data, let's retrieve it.
+		string incMessage = ReadMessage(serverSocket);
+		ProcessClientRequest(incMessage);
     }
   }
+}
+
+void ProcessClientRequest(string msg) {
+	const char * cMsg = msg.c_str();
+	if (cMsg[0] != '/') {
+		string userFrom = "";
+		int userSize = 0;
+		for (int i = 0; i < msg.length(); i++) {
+			if (cMsg[i] == ' ') {
+				userSize = i;
+				break;
+			}
+		}
+		
+		if (userSize) {
+			// Build User message
+			stringstream ss;
+			for (int i = 0; i < userSize; i++) {
+				ss << cMsg[i];
+			}
+			userFrom = ss.str();
+			ss.str("");
+			ss.clear();
+			
+			// Search our user base for user and toggle subscription
+			pthread_mutex_lock(&userListLock);
+			deque<string>::iterator userIter = USER_LIST.begin();
+			while (userIter != USER_LIST.end()) {
+				if (*userIter == userFrom) {
+					break;
+				}
+				userIter++;
+			}
+			if (userIter == USER_LIST.end()) {
+				// Couldn't find user, so add them to subscribers
+				USER_LIST.push_back(userFrom);
+			} else {
+				// Remove user form subscribers
+				USER_LIST.erase(userIter);
+			}
+			pthread_mutex_unlock(&userListLock);
+		}
+	}
 }
 
 void ProcessSignal(int sig) {
