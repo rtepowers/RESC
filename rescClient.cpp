@@ -8,6 +8,7 @@
 
 // Standard Library
 #include<iostream>
+#include<fstream>
 #include<sstream>
 #include<string>
 #include<ctime>
@@ -73,7 +74,7 @@ void* ServerThread(void* args_p);
 // pre: none
 // post: none
 
-void DisplayMessage(string &msg);
+void DisplayMessage(string &msg, bool isSystemMessage);
 // Function displays message on screen
 // pre: MSG_SCREEN should exist
 // post: none
@@ -95,6 +96,11 @@ bool HasAuthenticated (int serverSocket, User &user);
 
 void ProcessMessage(string rawMsg);
 // Function processess incoming messages.
+// pre: none
+// post: none
+
+void SaveFileStream(Message &fileStream, string userFrom);
+// Function process file stream
 // pre: none
 // post: none
 
@@ -149,7 +155,7 @@ int main (int argc, char * argv[])
 				string tmp = "You said: ";
 				tmp.append(inputStr);
 				tmp.append("\n");
-				DisplayMessage(tmp);
+				DisplayMessage(tmp, false);
 			
 				// Send to Chat Server
 				SendMessage(serverSocket, inputStr);
@@ -241,26 +247,26 @@ bool HasAuthenticated (int serverSocket, User &user) {
   string userPwd;
 
   // Reset Screen
-  DisplayMessage(clearScr);
+  DisplayMessage(clearScr, false);
   wrefresh(INPUT_SCREEN);
   ClearInputScreen();
 
   // Get UserName
-  DisplayMessage(loginMsg);
+  DisplayMessage(loginMsg, true);
   wrefresh(INPUT_SCREEN);
   while (!GetUserInput(userName, false)) {
   }
   ClearInputScreen();
   
   // Get Password
-  DisplayMessage(pwdMsg);
+  DisplayMessage(pwdMsg, false);
   wrefresh(INPUT_SCREEN);
   while (!GetUserInput(userPwd, true)) {
   }
   ClearInputScreen();
 
   // Reset Screen
-  DisplayMessage(clearScr);
+  DisplayMessage(clearScr, false);
   wrefresh(INPUT_SCREEN);
   ClearInputScreen();
   
@@ -331,25 +337,38 @@ bool GetUserInput(string &inputStr, bool shouldProtect) {
   return success;
 }
 
-void DisplayMessage(string &msg) {
-  pthread_mutex_lock(&displayLock);
-  // Add Msg to screen.
-  // SET Colors for window.
-  init_pair(1, COLOR_CYAN, COLOR_BLACK);
-  wbkgd(MSG_SCREEN, COLOR_PAIR(1));
-  waddstr(MSG_SCREEN, msg.c_str());
-  
-  // Show new screen.
-  wrefresh(MSG_SCREEN);
-  pthread_mutex_unlock(&displayLock);
+void DisplayMessage(string &msg, bool isSystemMessage) {
+	pthread_mutex_lock(&displayLock);
+	// Add Msg to screen.
+	// SET Colors for window.
+	init_pair(1, COLOR_CYAN, COLOR_BLACK);
+	init_pair(2, COLOR_GREEN, COLOR_BLACK);
+	if (!isSystemMessage) {
+		wattrset(MSG_SCREEN, COLOR_PAIR(1));
+	} else {
+		wattrset(MSG_SCREEN, COLOR_PAIR(2));
+	}
+	wprintw(MSG_SCREEN, msg.c_str());
+	
+	wrefresh(MSG_SCREEN);
+	pthread_mutex_unlock(&displayLock);
 
 }
 
 void DisplayUserList(string &msg) {
 	pthread_mutex_lock(&displayLock);
- 	init_pair(2, COLOR_MAGENTA, COLOR_BLACK);
-	wbkgd(USER_SCREEN, COLOR_PAIR(2));
-	waddstr(USER_SCREEN, msg.c_str());
+ 	init_pair(3, COLOR_MAGENTA, COLOR_BLACK);
+ 	init_pair(4, COLOR_WHITE, COLOR_BLACK);
+	wbkgd(USER_SCREEN, COLOR_PAIR(4));
+	const char * cMsg = msg.c_str();
+	for (int i = 0; i < msg.length(); i++) {
+		if (cMsg[i] == '|') {
+			wattrset(USER_SCREEN, COLOR_PAIR(4));
+		} else {
+			wattrset(USER_SCREEN, COLOR_PAIR(3));
+		}
+		waddch(USER_SCREEN, cMsg[i]);
+	}
 	
 	// Show screen
 	wrefresh(USER_SCREEN);
@@ -411,7 +430,7 @@ void ProcessIncomingData(int serverSocket) {
 
 void ProcessMessage(string rawMsg) {
 	RESC::Message msg = RESC::ConvertServerMessage(rawMsg);
-	string DEBUG = "Has Received FileStream.\n";
+	string ConfirmFileStreamMsg = msg.from + " sent you a FileStream.\n";
 	switch(msg.cmd) {
 		case USER_LIST_MSG:
 			ClearUserScreen();
@@ -419,10 +438,22 @@ void ProcessMessage(string rawMsg) {
 			break;
 		case FILE_STREAM_MSG:
 			// Gonna have to figure out where to save these things.
-			DisplayMessage(DEBUG);
+			DisplayMessage(ConfirmFileStreamMsg, true);
+			SaveFileStream(msg, msg.from);
 			break;
 		default:
-			DisplayMessage(rawMsg);
+			DisplayMessage(rawMsg, false);
 			break;
 	}
+}
+
+void SaveFileStream(Message &fileStream, string userFrom) {
+	
+	// Save File
+	ofstream savFile;
+	string filename = userFrom + ".txt";
+	savFile.open(filename.c_str(), ofstream::app);
+	savFile << fileStream.msg << endl;
+	savFile.close();
+	
 }

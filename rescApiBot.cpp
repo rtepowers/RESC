@@ -77,8 +77,8 @@ int main (int argc, char * argv[]) {
 	
 	serverSocket = OpenSocket(hostname, serverPort);
 	
-	string authMsg = argv[3];
-	authMsg.append("|test");
+	string username = argv[3];
+	string authMsg = username + "|test";
 	SendMessage(serverSocket, authMsg);
 	string authResponse = ReadMessage(serverSocket);
 	
@@ -101,17 +101,19 @@ int main (int argc, char * argv[]) {
 		string tmpFile = "outputRecent.txt";
 		tmp.str("");
 		tmp.clear();
-		int status = system(string("date +\"%F %H:%M:%S :\" > " + tmpFile).c_str());
-		string sysCommandPrep = "date +\"%n%F %H:%M:%S :\" > " + tmpFile;
-		string sysCommand = "curl " + string(argv[4]) + " > " + tmpFile;
+
+		string sysCommandPrep = "date +\"%F %H:%M:%S :\" > " + tmpFile;
+		string sysCommand = "curl " + string(argv[4]) + " >> " + tmpFile;
 		string sysCommandLog = "cat " + tmpFile + " >> " + filename;
+		string sysCommandNewLine = "echo \"\n\" >> " + filename;
 		while (true) {
 			// Do work section
 			// Grab url
 			sleep(5);
+			int status = system(sysCommandPrep.c_str());
 			status = system(sysCommand.c_str());
-			status = system(sysCommandPrep.c_str());
 			status = system(sysCommandLog.c_str());
+			status = system(sysCommandNewLine.c_str());
 		
 			// Do work
 			sleep(5);
@@ -119,7 +121,7 @@ int main (int argc, char * argv[]) {
 			string data = ReadFile(tmpFile);
 		
 			// Send Message
- 			data = "/filestream " + data;
+ 			data = "/msg ray /filestream "+ username + " " + data;
  			SendMessage(serverSocket, data);
  			cout << "Sent message." << endl;
 		}

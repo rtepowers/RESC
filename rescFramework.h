@@ -127,12 +127,12 @@ Message ConvertMessage(string msg, string from)
 			newMsg.msg.append(ss.str());
 			ss.str("");
 			ss.clear();
-		} else if (cmdName == "/filestream") {
-			for (int i = 0; i < msg.length();i++) {
+		} else if (cmdName == "/all") {
+			for (int i = cmdSize+1; i < msg.length();i++) {
 				ss << cMsg[i];
 			}
+			newMsg.cmd = BROADCAST_MSG;
 			newMsg.msg.append(ss.str());
-			newMsg.cmd = FILE_STREAM_MSG;
 			ss.str("");
 			ss.clear();
 		}
@@ -190,13 +190,38 @@ Message ConvertServerMessage(string rawMsg)
 			ss.str("");
 			ss.clear();
 		} else if (cmdName == "/filestream") {
-			for (int i = cmdSize+1; i < rawMsg.length();i++) {
-				ss << cMsg[i];
+// 			for (int i = cmdSize+1; i < rawMsg.length();i++) {
+// 				ss << cMsg[i];
+// 			}
+// 			newMsg.msg.append(ss.str());
+// 			newMsg.cmd = FILE_STREAM_MSG;
+// 			ss.str("");
+// 			ss.clear();
+			
+			int userSize = 0;
+			for (int i = cmdSize+1; i < rawMsg.length(); i++) {
+				if (cMsg[i] == ' ') {
+					userSize = i;
+					break;
+				}
 			}
-			newMsg.msg.append(ss.str());
-			newMsg.cmd = FILE_STREAM_MSG;
-			ss.str("");
-			ss.clear();
+			if (userSize > 0) {
+				// Build UserFrom
+				for (int i = cmdSize+1; i < userSize; i++) {
+					ss << cMsg[i];
+				}
+				newMsg.from = ss.str();
+				ss.str("");
+				ss.clear();
+				newMsg.cmd = FILE_STREAM_MSG;
+			
+				for (int i = userSize+1; i < rawMsg.length();i++) {
+					ss << cMsg[i];
+				}
+				newMsg.msg.append(ss.str());
+				ss.str("");
+				ss.clear();
+			}
 		}
 	} else {
 		newMsg.cmd = BROADCAST_MSG;
