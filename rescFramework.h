@@ -12,6 +12,7 @@
 #include<iostream>
 #include<cstdio>
 #include<string>
+#include<cstring>
 
 // Network Function
 #include<sys/types.h>
