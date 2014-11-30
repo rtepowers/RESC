@@ -372,7 +372,6 @@ bool ValidateUser(string request, RESC::User &user)
 		newUser.isConnected = true;
 		user.username = username;
 		user.isConnected = true;
-		//USER_LIST.insert(make_pair<string, RESC::User>(username, newUser));
 		USER_LIST.insert(make_pair(username, newUser));
 		isValidated = true;
 	}
@@ -380,7 +379,6 @@ bool ValidateUser(string request, RESC::User &user)
 	
 	if (isValidated) {
 		pthread_mutex_lock(&MsgQueueLock);
-		//MSG_QUEUE.insert(make_pair<string, deque<RESC::Message> >(username, deque<RESC::Message>()));
 		MSG_QUEUE.insert(make_pair(username, deque<RESC::Message>()));
 		pthread_mutex_unlock(&MsgQueueLock);
 	}
