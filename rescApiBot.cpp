@@ -105,15 +105,12 @@ int main (int argc, char * argv[]) {
 		time_t currentTime = time(NULL);
 		stringstream tmp;
 		tmp << currentTime;
-		string filename = "output" + tmp.str() + ".txt";
 		string tmpFile = "outputRecent.txt";
 		tmp.str("");
 		tmp.clear();
 
-		string sysCommandPrep = "date +\"%F %H:%M:%S :\" > " + tmpFile;
-		string sysCommand = "curl " + string(argv[4]) + " >> " + tmpFile;
-		string sysCommandLog = "cat " + tmpFile + " >> " + filename;
-		string sysCommandNewLine = "echo \"\n\" >> " + filename;
+		string sysCommand = "curl \"" + string(argv[4]) + "\" > " + tmpFile;
+		string sysCommandNewLine = "echo \"\n\" >> " + tmpFile;
 		while (true) {
 			// Do work section
 			// Grab url
@@ -123,22 +120,19 @@ int main (int argc, char * argv[]) {
 			numOfUsers = USER_LIST.size();
 			pthread_mutex_unlock(&userListLock);
 			if (numOfUsers) {
-				int status = system(sysCommandPrep.c_str());
-				status = system(sysCommand.c_str());
-				status = system(sysCommandLog.c_str());
+				// Grab URL Data
+				int status = system(sysCommand.c_str());
 				status = system(sysCommandNewLine.c_str());
-		
-				// Do work
-				sleep(5);
+				cout << "Succeeded!" << endl;
+
 				// Read File
 				string data = ReadFile(tmpFile);
 		
 				// Send Message
-				data = " /filestream "+ username + " " + data;
 				pthread_mutex_lock(&userListLock);
 				deque<string>::iterator userIter = USER_LIST.begin();
 				while (userIter != USER_LIST.end()) {
-					string msgToSend = "/msg " + *userIter + data;
+					string msgToSend = "/filestream " + *userIter + " " + data;
 					SendMessage(serverSocket, msgToSend);
 					userIter++;
 				}
@@ -207,45 +201,26 @@ void ProcessServerMessages(int serverSocket)
 }
 
 void ProcessClientRequest(string msg) {
-	const char * cMsg = msg.c_str();
-	if (cMsg[0] != '/') {
-		string userFrom = "";
-		int userSize = 0;
-		for (int i = 0; i < msg.length(); i++) {
-			if (cMsg[i] == ' ') {
-				userSize = i;
+	Message parsedMsg = CreateMessage(msg, "");
+	
+	if (parsedMsg.cmd == DIRECT_MSG) {
+		// Search our user base for user and toggle subscription
+		pthread_mutex_lock(&userListLock);
+		deque<string>::iterator userIter = USER_LIST.begin();
+		while (userIter != USER_LIST.end()) {
+			if (*userIter == parsedMsg.from) {
 				break;
 			}
+			userIter++;
 		}
-		
-		if (userSize) {
-			// Build User message
-			stringstream ss;
-			for (int i = 0; i < userSize; i++) {
-				ss << cMsg[i];
-			}
-			userFrom = ss.str();
-			ss.str("");
-			ss.clear();
-			
-			// Search our user base for user and toggle subscription
-			pthread_mutex_lock(&userListLock);
-			deque<string>::iterator userIter = USER_LIST.begin();
-			while (userIter != USER_LIST.end()) {
-				if (*userIter == userFrom) {
-					break;
-				}
-				userIter++;
-			}
-			if (userIter == USER_LIST.end()) {
-				// Couldn't find user, so add them to subscribers
-				USER_LIST.push_back(userFrom);
-			} else {
-				// Remove user form subscribers
-				USER_LIST.erase(userIter);
-			}
-			pthread_mutex_unlock(&userListLock);
+		if (userIter == USER_LIST.end()) {
+			// Couldn't find user, so add them to subscribers
+			USER_LIST.push_back(parsedMsg.from);
+		} else {
+			// Remove user form subscribers
+			USER_LIST.erase(userIter);
 		}
+		pthread_mutex_unlock(&userListLock);
 	}
 }
 

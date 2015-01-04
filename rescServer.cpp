@@ -227,13 +227,9 @@ void ProcessRequest(int requestSock) {
 		if (msgIter != MSG_QUEUE.end()) {
 			while (!(*msgIter).second.empty()) {
 				RESC::Message tmpMsg =  (*msgIter).second.front();
-				RESC::Message processMsg = RESC::ConvertServerMessage(tmpMsg.msg);
-				if (processMsg.cmd != RESC::USER_LIST_MSG && processMsg.cmd != RESC::FILE_STREAM_MSG) {
-					string tmp = tmpMsg.from + " said: " + tmpMsg.msg + "\n";
-					RESC::SendMessage(requestSock, tmp);
-				} else {
-					RESC::SendMessage(requestSock, tmpMsg.msg);
-				}
+				// 
+				string outMsg = RESC::EncodeMessage(tmpMsg);
+				RESC::SendMessage(requestSock, outMsg);
 				(*msgIter).second.pop_front();
 			}
 		}
@@ -275,7 +271,7 @@ void UpdateUserLists() {
 	RESC::Message usrListMsg;
 	usrListMsg.from = "SERVER";
 	usrListMsg.cmd = RESC::USER_LIST_MSG;
-	usrListMsg.msg = "/userlist " + ss.str();
+	usrListMsg.msg = ss.str();
 	ss.str("");
 	ss.clear();
 	unordered_map<string, deque<RESC::Message> >::iterator msgIter;
@@ -290,7 +286,7 @@ void UpdateUserLists() {
 }
 
 void ProcessMessage(string rawMsg, string userFrom) {
-	RESC::Message msg = RESC::ConvertMessage(rawMsg, userFrom);
+	RESC::Message msg = RESC::CreateMessage(rawMsg, userFrom);
 	if (msg.cmd == RESC::INVALID_MSG) return;
 	
 	unordered_map<string, deque<RESC::Message> >::iterator msgIter;
@@ -309,22 +305,21 @@ void ProcessMessage(string rawMsg, string userFrom) {
 			break;
 		case RESC::DIRECT_MSG:
 			pthread_mutex_lock(&MsgQueueLock);
-				// Add to all the queues
 				msgIter = MSG_QUEUE.find(msg.to);
 				if (msgIter != MSG_QUEUE.end()) {
-					(*msgIter).second.push_back(msg);
+					if ((*msgIter).first.compare(userFrom)) {
+						(*msgIter).second.push_back(msg);
+					}
 				}
 			pthread_mutex_unlock(&MsgQueueLock);
 			break;
 		case RESC::FILE_STREAM_MSG:
 			pthread_mutex_lock(&MsgQueueLock);
-				// Add to all the queues
-				msgIter = MSG_QUEUE.begin();
-				while (msgIter != MSG_QUEUE.end()) {
+				msgIter = MSG_QUEUE.find(msg.to);
+				if (msgIter != MSG_QUEUE.end()) {
 					if ((*msgIter).first.compare(userFrom)) {
 						(*msgIter).second.push_back(msg);
 					}
-					msgIter++;
 				}
 			pthread_mutex_unlock(&MsgQueueLock);
 			break;

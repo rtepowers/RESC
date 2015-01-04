@@ -64,34 +64,36 @@ bool HasQuit(string msg)
 	return hasQuit;
 }
 
-Message ConvertMessage(string msg, string from)
+// Message Protocol
+Message CreateMessage(string msg, string from)
 {
 	// Turn
-	// "/msg userX blahblahblah"
+	// "/msg userX blahblahblah", "UserA"
 	// into
-	// ("blahblahblah", "userX", "", DIRECT_MSG)
+	// ("blahblahblah", "userX", "UserA", DIRECT_MSG)
 	Message newMsg;
 	newMsg.msg = "";
 	newMsg.to = "";
 	newMsg.from = from;
 	newMsg.cmd = INVALID_MSG;
 	string cmdName = "";
+	bool isClient = (newMsg.from == "");
 	
-	const char * cMsg = msg.c_str();
+	const char *cMsg = msg.c_str();
 	if (cMsg[0] == '/') {
-		// Message was a command
-		int cmdSize = 0;
+		// Assumption is that all messages to be parsed start with a '/'
+		int cmdSize = -1;
 		for (int i = 1; i < msg.length(); i++) {
 			if (cMsg[i] == ' ') {
 				cmdSize = i;
 				break;
 			}
 		}
-		if (cmdSize == 0) {
-			// Direct Command (ie. No Args)
+		if (cmdSize == -1) {
+			// Non-Argument Command was entered.
 			cmdSize = msg.length();
 		}
-		// Build Command type
+		// Build Command Type
 		stringstream ss;
 		for (int i = 0; i < cmdSize; i++) {
 			ss << cMsg[i];
@@ -100,90 +102,67 @@ Message ConvertMessage(string msg, string from)
 		ss.str("");
 		ss.clear();
 		
-		// Now to interpret arg-based commands.
-		if (cmdName == "/msg") {
-			int userSize = 0;
+		if (cmdName == "/all") {
+			int userSize = -1;
 			for (int i = cmdSize+1; i < msg.length(); i++) {
 				if (cMsg[i] == ' ') {
 					userSize = i;
 					break;
 				}
 			}
-			if (userSize == 0) {
-				// No message, just action.
-				userSize = msg.length();
+			if (userSize == -1) {
+				return newMsg;
+			}
+			for (int i = cmdSize+1; i < userSize; i++) {
+				ss << cMsg[i];
+			}
+			if (isClient) {
+				newMsg.from.append(ss.str());
+			} else {
+				newMsg.to.append(ss.str());
+			}
+			ss.str("");
+			ss.clear();
+			for (int i = userSize+1; i < msg.length(); i++) {
+				ss << cMsg[i];
+			}
+			newMsg.msg.append(ss.str());
+			ss.str("");
+			ss.clear();
+			newMsg.cmd = BROADCAST_MSG;
+			
+		} else if (cmdName == "/msg") {
+			int userSize = -1;
+			for (int i = cmdSize+1; i < msg.length(); i++) {
+				if (cMsg[i] == ' ') {
+					userSize = i;
+					break;
+				}
+			}
+			if (userSize == -1) {
+				// No user target, so this is invalid.
+				return newMsg;
 			}
 			// Build UserTo
 			for (int i = cmdSize+1; i < userSize; i++) {
 				ss << cMsg[i];
 			}
-			newMsg.to.append(ss.str());
+			if (isClient) {
+				newMsg.from.append(ss.str());
+			} else {
+				newMsg.to.append(ss.str());
+			}
 			ss.str("");
 			ss.clear();
-			newMsg.cmd = DIRECT_MSG;
-			
 			for (int i = userSize+1; i < msg.length();i++) {
 				ss << cMsg[i];
 			}
 			newMsg.msg.append(ss.str());
 			ss.str("");
 			ss.clear();
-		} else if (cmdName == "/all") {
+			newMsg.cmd = DIRECT_MSG;
+		} else if (cmdName == "/userlist") {
 			for (int i = cmdSize+1; i < msg.length();i++) {
-				ss << cMsg[i];
-			}
-			newMsg.cmd = BROADCAST_MSG;
-			newMsg.msg.append(ss.str());
-			ss.str("");
-			ss.clear();
-		}
-	} else {
-		newMsg.cmd = BROADCAST_MSG;
-		newMsg.msg = msg;
-	}
-	
-	return newMsg;
-}
-
-Message ConvertServerMessage(string rawMsg)
-{
-	// Turn
-	// "/msg userX blahblahblah"
-	// into
-	// ("blahblahblah", "userX", "", DIRECT_MSG)
-	Message newMsg;
-	newMsg.msg = "";
-	newMsg.to = "";
-	newMsg.from = "SERVER";
-	newMsg.cmd = INVALID_MSG;
-	string cmdName = "";
-	
-	const char * cMsg = rawMsg.c_str();
-	if (cMsg[0] == '/') {
-		// Message was a command
-		int cmdSize = 0;
-		for (int i = 1; i < rawMsg.length(); i++) {
-			if (cMsg[i] == ' ') {
-				cmdSize = i;
-				break;
-			}
-		}
-		if (cmdSize == 0) {
-			// Direct Command (ie. No Args)
-			cmdSize = rawMsg.length();
-		}
-		// Build Command type
-		stringstream ss;
-		for (int i = 0; i < cmdSize; i++) {
-			ss << cMsg[i];
-		}
-		cmdName.append(ss.str());
-		ss.str("");
-		ss.clear();
-		
-		// Now to interpret arg-based commands.
-		if (cmdName == "/userlist") {
-			for (int i = cmdSize+1; i < rawMsg.length();i++) {
 				ss << cMsg[i];
 			}
 			newMsg.msg.append(ss.str());
@@ -191,38 +170,73 @@ Message ConvertServerMessage(string rawMsg)
 			ss.str("");
 			ss.clear();
 		} else if (cmdName == "/filestream") {
-			int userSize = 0;
-			for (int i = cmdSize+1; i < rawMsg.length(); i++) {
+			int userSize = -1;
+			for (int i = cmdSize+1; i < msg.length(); i++) {
 				if (cMsg[i] == ' ') {
 					userSize = i;
 					break;
 				}
 			}
-			if (userSize > 0) {
-				// Build UserFrom
-				for (int i = cmdSize+1; i < userSize; i++) {
-					ss << cMsg[i];
-				}
-				newMsg.from = ss.str();
-				ss.str("");
-				ss.clear();
-				newMsg.cmd = FILE_STREAM_MSG;
-			
-				for (int i = userSize+1; i < rawMsg.length();i++) {
-					ss << cMsg[i];
-				}
-				newMsg.msg.append(ss.str());
-				ss.str("");
-				ss.clear();
+			if (userSize == -1) {
+				// invalid message
+				return newMsg;
 			}
+			// Build UserFrom
+			for (int i = cmdSize+1; i < userSize; i++) {
+				ss << cMsg[i];
+			}
+			if (isClient) {
+				newMsg.from.append(ss.str());
+			} else {
+				newMsg.to.append(ss.str());
+			}
+			ss.str("");
+			ss.clear();
+			newMsg.cmd = FILE_STREAM_MSG;
+		
+			for (int i = userSize+1; i < msg.length();i++) {
+				ss << cMsg[i];
+			}
+			newMsg.msg.append(ss.str());
+			ss.str("");
+			ss.clear();
 		}
+		
 	} else {
+		// Legacy support states that broadcast messages do not need a '/' starter
 		newMsg.cmd = BROADCAST_MSG;
-		newMsg.msg = rawMsg;
+		newMsg.msg = msg;
 	}
 	
 	return newMsg;
 }
+
+string EncodeMessage(Message msg)
+{
+	stringstream ss;
+	
+	switch (msg.cmd) {
+		case INVALID_MSG:
+			break;
+		case DIRECT_MSG:
+			ss << "/msg " << msg.from << " " << msg.msg;
+			break;
+		case BROADCAST_MSG:
+			ss << "/all " << msg.from << " " << msg.msg;
+			break;
+		case FILE_STREAM_MSG:
+			ss << "/filestream " << msg.from << " " << msg.msg;
+			break;
+		case USER_LIST_MSG:
+			ss << "/userlist " << msg.msg;
+			break;
+		default:
+			break;
+	}
+	
+	return ss.str();
+}
+
 
 // Network Helper Functions	
 	bool SendData(int outSocket, string msg) {
