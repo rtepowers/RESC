@@ -118,6 +118,7 @@ int main (int argc, char * argv[])
 	}
 	
 	// We are good to go! Alert admin running that we can now accept requests
+	cout << sizeof(long) << endl;
 	cout << endl << "RESCD: Ready to accept connections. " << endl;
 	
 	
@@ -187,6 +188,7 @@ void ProcessRequest(int requestSock) {
 	// Authenticate User
 	bool hasValidated = true;
 	do {
+		cout << "Reading message incoming" << endl;
 		string authRequest = RESC::ReadMessage(requestSock);
 		hasValidated = ValidateUser(authRequest, user);
 		string authResponse = (hasValidated) ? "SUCCESSFUL" : "UNSUCCESSFUL";

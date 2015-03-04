@@ -260,6 +260,7 @@ string EncodeMessage(Message msg)
 	string GetData(int inSock, int messageLength) {
 	  // Retrieve msg
 	  int bytesLeft = messageLength;
+	  cout << "Message size: " << messageLength << endl;
 	  char buffer[messageLength];
 	  char* buffPTR = buffer;
 	  while (bytesLeft > 0){
@@ -272,6 +273,12 @@ string EncodeMessage(Message msg)
 		bytesLeft = bytesLeft - bytesRecv;
 		buffPTR = buffPTR + bytesRecv;
 	  }
+	  cout << "REceived message ";
+		cout << "Message so far: ";
+		for (int i = 0; i < bytesLeft; i++) {
+			cout << buffer[i];
+		}
+		cout << endl;
 
 	  return buffer;
 	}
@@ -313,6 +320,7 @@ string EncodeMessage(Message msg)
 	}
 	
 	void SendMessage(int outSocket, string msg) {
+		cout << "Sending msg "<< msg << endl;
 		if (!SendInteger(outSocket, msg.length()+1)) {
 			cerr << "Unable to send Int. " << endl;
 			return;
@@ -324,15 +332,18 @@ string EncodeMessage(Message msg)
 	}
 	
 	string ReadMessage(int inSocket) {
+		cout << "Trying to read message. " << endl;
 		long msgLength = GetInteger(inSocket);
 		if (msgLength <= 0) {
 			cerr << "Couldn't get integer." << endl;
 		}
+		cout << "Length of incoming message: " << msgLength << endl;
 		string bodyMsg = GetData(inSocket, msgLength);
 		if (bodyMsg == "") {
 			cerr << "Couldn't get message." << endl;
 		}
-
+		
+		cout << "Recv'd Msg " << bodyMsg << endl;
 		return bodyMsg;
 	}
 	
