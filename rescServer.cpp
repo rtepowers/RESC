@@ -118,7 +118,6 @@ int main (int argc, char * argv[])
 	}
 	
 	// We are good to go! Alert admin running that we can now accept requests
-	cout << sizeof(long) << endl;
 	cout << endl << "RESCD: Ready to accept connections. " << endl;
 	
 	
