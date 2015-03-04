@@ -348,7 +348,7 @@ bool ValidateUser(string request, RESC::User &user)
 	password = ss.str();
 	ss.str("");
 	ss.clear();
-	
+	cout << "Recv'd message to Auth" << endl;
 	pthread_mutex_lock(&UserListLock);
 	unordered_map<string, RESC::User>::iterator usrIter = USER_LIST.find(username);
 	if (usrIter != USER_LIST.end()) {
